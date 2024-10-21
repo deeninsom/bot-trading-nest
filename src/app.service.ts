@@ -21,7 +21,7 @@ export class AppService implements OnModuleInit {
     const { account, metaApi, streamConnection } = await this.initializeMetaApi()
     await this.fetchLastCandleHistories(account)
     const dataCandle = await this.fetchCandleFromDatabase()
-    this.calculateRSI(dataCandle, 14);
+    this.calculateRSI(dataCandle, 14, streamConnection);
     this.scheduleNextFetch(account, metaApi, streamConnection)
   }
 
@@ -97,7 +97,7 @@ export class AppService implements OnModuleInit {
     }
   }
 
-  calculateRSI(candles: any[], period: number): number | null {
+  calculateRSI(candles: any[], period: number, connection): number | null {
     if (candles.length < period) {
       console.log('Not enough data to calculate RSI');
       return null;
@@ -106,46 +106,39 @@ export class AppService implements OnModuleInit {
     let gains = 0;
     let losses = 0;
 
+    // Hitung total gains dan losses selama periode
     for (let i = candles.length - period; i < candles.length - 1; i++) {
       const change = candles[i + 1].close - candles[i].close;
       if (change > 0) {
         gains += change;
       } else {
-        losses -= change;
+        losses -= change; // Mengurangi karena losses adalah nilai negatif
       }
     }
 
+    // Menghindari pembagian dengan nol
     const averageGain = gains / period;
     const averageLoss = losses / period;
 
-    if (averageLoss === 0) {
-      return 100;
-    }
+    // RS adalah rasio dari rata-rata gain terhadap rata-rata loss
+    const rs = averageLoss === 0 ? 0 : averageGain / averageLoss; // Jika averageLoss adalah 0, set RS ke 0
 
-    const rs = averageGain / averageLoss;
-    const rsi = 100 - (100 / (1 + rs));
+    const rsi = averageLoss === 0 ? 100 : 100 - (100 / (1 + rs)); // Jika tidak ada kerugian, RSI adalah 100
 
     console.log('Calculated RSI:', rsi);
-    this.checkOverboughtOversold(rsi, candles);
+    console.log('Total Gains:', gains);
+    console.log('Total Losses:', losses);
+    console.log('Average Gain:', averageGain);
+    console.log('Average Loss:', averageLoss);
+    console.log('RS:', rs);
+    console.log('Calculated RSI:', rsi);
+    this.checkOverboughtOversold(rsi, candles, connection);
     return rsi;
   }
 
 
-  scheduleNextFetch(account, metaApi, streamConnection) {
-    const now: any = new Date();
 
-    const nextFiveMinutes: any = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), Math.floor(now.getMinutes() / 5) * 5 + 5, 0, 0);
-    const timeout = nextFiveMinutes - now;
-
-    setTimeout(async () => {
-      await this.fetchLastCandleHistories(account);
-      const dataCandle = await this.fetchCandleFromDatabase()
-      this.calculateRSI(dataCandle, 14);
-      this.scheduleNextFetch(account, metaApi, streamConnection);
-    }, timeout);
-  }
-
-  checkOverboughtOversold(rsi: number | null, candles: any[]) {
+  checkOverboughtOversold(rsi: number | null, candles: any[], connection) {
     if (rsi === null) {
       console.log('RSI calculation was not successful');
       return;
@@ -153,6 +146,7 @@ export class AppService implements OnModuleInit {
 
     const currentCandleIndex = candles.length - 1;
     const previousCandleIndex = candles.length - 2;
+
 
     if (currentCandleIndex < 1) {
       console.log('Not enough candles to check for confirmation.');
@@ -162,16 +156,26 @@ export class AppService implements OnModuleInit {
     // Check for oversold condition
     if (rsi <= 30) {
       if (candles[currentCandleIndex].close > candles[previousCandleIndex].close) {
+        console.log(candles[currentCandleIndex].close)
+        console.log(candles[previousCandleIndex].close)
         console.log('Market is oversold and confirmed by the current candle being higher than the previous candle.');
+        this.executeTrade('buy', connection)
       } else {
+        console.log(candles[currentCandleIndex].close)
+        console.log(candles[previousCandleIndex].close)
         console.log('Market is oversold but no confirmation from the current candle.');
       }
     }
     // Check for overbought condition
     else if (rsi >= 70) {
       if (candles[currentCandleIndex].close < candles[previousCandleIndex].close) {
+        console.log(candles[currentCandleIndex].close)
+        console.log(candles[previousCandleIndex].close)
         console.log('Market is overbought and confirmed by the current candle being lower than the previous candle.');
+        this.executeTrade('sell', connection)
       } else {
+        console.log(candles[currentCandleIndex].close)
+        console.log(candles[previousCandleIndex].close)
         console.log('Market is overbought but no confirmation from the current candle.');
       }
     } else {
@@ -179,47 +183,99 @@ export class AppService implements OnModuleInit {
     }
   }
 
+  // async executeTrade(openMarket, connection) {
+  //   if (!connection) {
+  //     console.error('Connection is not defined. Cannot execute trade.');
+  //     return; // Keluar jika koneksi tidak valid
+  //   }
+  //   let orderResponse;
+  //   switch (openMarket) {
+  //     case 'buy':
+  //       orderResponse = await connection.createMarketBuyOrder(this.pair, this.volume);
+  //       break;
+
+  //     case 'sell':
+  //       orderResponse = await connection.createMarketSellOrder(this.pair, this.volume);
+  //       break;
+
+  //     default:
+  //       console.log('Open market is invalid. Must be "buy" or "sell".');
+  //       return;
+  //   }
+
+  //   // Menunggu sebentar untuk memastikan order tercatat
+  //   await new Promise(resolve => setTimeout(resolve, 2000));
+  //   const orderHistory = await connection.historyStorage.getHistoryOrdersByPosition(`${orderResponse.positionId}`);
+
+  //   // Cek apakah ada order dalam riwayat
+  //   if (!orderHistory || orderHistory.length === 0) {
+  //     console.error('No order history found. Cannot set TP.');
+  //     return; // Keluar jika tidak ada riwayat order
+  //   }
+
+  //   // Mendapatkan harga setelah order dieksekusi
+  //   const executedPrice = orderHistory[0]?.openPrice;
+  //   const tipeOrder = orderHistory[0].type
+
+  //   // Hitung TP dan SL
+  //   const tp = tipeOrder !== 'ORDER_TYPE_BUY' ? executedPrice - 0.030 : executedPrice + 0.030;
+  //   const sl = tipeOrder !== 'ORDER_TYPE_BUY' ? executedPrice + 0.060 : executedPrice - 0.060
+
+  //   await this.setTakeProfit(connection, orderHistory[0]?.id, tp.toFixed(3), sl.toFixed(3));
+
+  // }
+
   async executeTrade(openMarket, connection) {
     if (!connection) {
       console.error('Connection is not defined. Cannot execute trade.');
-      return; // Keluar jika koneksi tidak valid
+      return; // Exit if the connection is not valid
     }
+
     let orderResponse;
-    switch (openMarket) {
-      case 'buy':
-        orderResponse = await connection.createMarketBuyOrder(this.pair, this.volume);
-        break;
 
-      case 'sell':
-        orderResponse = await connection.createMarketSellOrder(this.pair, this.volume);
-        break;
+    try {
+      // Attempt to create a market order
+      switch (openMarket) {
+        case 'buy':
+          orderResponse = await connection.createMarketBuyOrder(this.pair, this.volume);
+          break;
 
-      default:
-        console.log('Open market is invalid. Must be "buy" or "sell".');
-        return;
+        case 'sell':
+          orderResponse = await connection.createMarketSellOrder(this.pair, this.volume);
+          break;
+
+        default:
+          console.log('Open market is invalid. Must be "buy" or "sell".');
+          return; // Exit if the market type is invalid
+      }
+
+      // Wait briefly to ensure the order is recorded
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      const orderHistory = await connection.historyStorage.getHistoryOrdersByPosition(`${orderResponse.positionId}`);
+
+      // Check if there are any orders in history
+      if (!orderHistory || orderHistory.length === 0) {
+        console.error('No order history found. Cannot set TP.');
+        return; // Exit if there is no order history
+      }
+
+      // Get the price after the order is executed
+      const executedPrice = orderHistory[0]?.openPrice;
+      const orderType = orderHistory[0].type;
+
+      // Calculate TP and SL
+      const tp = orderType !== 'ORDER_TYPE_BUY' ? executedPrice - 0.080 : executedPrice + 0.080;
+      const sl = orderType !== 'ORDER_TYPE_BUY' ? executedPrice + 0.060 : executedPrice - 0.060;
+
+      await this.setTakeProfit(connection, orderHistory[0]?.id, tp.toFixed(3), sl.toFixed(3));
+
+    } catch (error) {
+      console.error('An error occurred while executing the trade:', error);
+      // Optionally, log the error and continue with the next operation
     }
-
-    // Menunggu sebentar untuk memastikan order tercatat
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    const orderHistory = await connection.historyStorage.getHistoryOrdersByPosition(`${orderResponse.positionId}`);
-
-    // Cek apakah ada order dalam riwayat
-    if (!orderHistory || orderHistory.length === 0) {
-      console.error('No order history found. Cannot set TP.');
-      return; // Keluar jika tidak ada riwayat order
-    }
-
-    // Mendapatkan harga setelah order dieksekusi
-    const executedPrice = orderHistory[0]?.openPrice;
-    const tipeOrder = orderHistory[0].type
-
-    // Hitung TP dan SL
-    const tp = tipeOrder !== 'ORDER_TYPE_BUY' ? executedPrice - 0.030 : executedPrice + 0.030;
-    const sl = tipeOrder !== 'ORDER_TYPE_BUY' ? executedPrice + 0.090 : executedPrice - 0.090
-
-    await this.setTakeProfit(connection, orderHistory[0]?.id, tp.toFixed(3), sl.toFixed(3));
-
   }
+
 
   async setTakeProfit(connection: any, orderId: any, tp: any, sl: any) {
     try {
@@ -243,4 +299,18 @@ export class AppService implements OnModuleInit {
     }
   }
 
+  scheduleNextFetch(account, metaApi, streamConnection) {
+    const now: any = new Date();
+
+    const nextFiveMinutes: any = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), Math.floor(now.getMinutes() / 5) * 5 + 5, 0, 0);
+    const timeout = nextFiveMinutes - now;
+
+    setTimeout(async () => {
+      const { account, metaApi, streamConnection } = await this.initializeMetaApi()
+      await this.fetchLastCandleHistories(account);
+      const dataCandle = await this.fetchCandleFromDatabase()
+      this.calculateRSI(dataCandle, 14, streamConnection);
+      this.scheduleNextFetch(account, metaApi, streamConnection);
+    }, timeout);
+  }
 }

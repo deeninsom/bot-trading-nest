@@ -16,6 +16,7 @@ dotenv.config();
       password: process.env.DB_PASSWORD || 'jodi',
       database: process.env.DB_NAME || 'trading',
       synchronize: Boolean(process.env.SYNC_DB),
+      // ssl: Boolean(process.env.SSL),
       entities: [
         PairUsdJpy
       ],
