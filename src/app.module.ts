@@ -4,6 +4,8 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import PairUsdJpy from './app.entity';
 import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
 dotenv.config();
 
 @Module({
@@ -16,10 +18,10 @@ dotenv.config();
       password: process.env.DB_PASSWORD || 'jodi',
       database: process.env.DB_NAME || 'trading',
       synchronize: Boolean(process.env.SYNC_DB),
-      ssl: Boolean(process.env.SSL),
       entities: [
         PairUsdJpy
       ],
+      connectTimeout: 10000,
     }),
     TypeOrmModule.forFeature([PairUsdJpy]),
   ],
