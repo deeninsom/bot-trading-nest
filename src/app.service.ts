@@ -37,17 +37,6 @@ export class AppService implements OnModuleInit {
     }
 
     await account.waitConnected();
-
-    // const historyStorage = streamConnection.historyStorage;
-    // console.log('deals for the last day:', historyStorage.getDealsByTimeRange(new Date(Date.now() - 24 * 60 * 60 * 1000),
-    // new Date()));
-    // console.log('deals:', historyStorage.deals.slice(-5));
-    // streamConnection.historyStorage.historyOrders.map((value) => {
-    //   const orderHistory = streamConnection.historyStorage.getHistoryOrdersByPosition(`${value.positionId}`);
-    //   console.log(orderHistory)
-    // })
-
-
     return { account, metaApi, streamConnection }
   }
 
@@ -194,47 +183,6 @@ export class AppService implements OnModuleInit {
     }
   }
 
-  // async executeTrade(openMarket, connection) {
-  //   if (!connection) {
-  //     console.error('Connection is not defined. Cannot execute trade.');
-  //     return; // Keluar jika koneksi tidak valid
-  //   }
-  //   let orderResponse;
-  //   switch (openMarket) {
-  //     case 'buy':
-  //       orderResponse = await connection.createMarketBuyOrder(this.pair, this.volume);
-  //       break;
-
-  //     case 'sell':
-  //       orderResponse = await connection.createMarketSellOrder(this.pair, this.volume);
-  //       break;
-
-  //     default:
-  //       console.log('Open market is invalid. Must be "buy" or "sell".');
-  //       return;
-  //   }
-
-  //   // Menunggu sebentar untuk memastikan order tercatat
-  //   await new Promise(resolve => setTimeout(resolve, 2000));
-  //   const orderHistory = await connection.historyStorage.getHistoryOrdersByPosition(`${orderResponse.positionId}`);
-
-  //   // Cek apakah ada order dalam riwayat
-  //   if (!orderHistory || orderHistory.length === 0) {
-  //     console.error('No order history found. Cannot set TP.');
-  //     return; // Keluar jika tidak ada riwayat order
-  //   }
-
-  //   // Mendapatkan harga setelah order dieksekusi
-  //   const executedPrice = orderHistory[0]?.openPrice;
-  //   const tipeOrder = orderHistory[0].type
-
-  //   // Hitung TP dan SL
-  //   const tp = tipeOrder !== 'ORDER_TYPE_BUY' ? executedPrice - 0.030 : executedPrice + 0.030;
-  //   const sl = tipeOrder !== 'ORDER_TYPE_BUY' ? executedPrice + 0.060 : executedPrice - 0.060
-
-  //   await this.setTakeProfit(connection, orderHistory[0]?.id, tp.toFixed(3), sl.toFixed(3));
-
-  // }
 
   async executeTrade(openMarket, connection) {
     if (!connection) {
