@@ -4,8 +4,8 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import PairUsdJpy from './app.entity';
 import * as dotenv from 'dotenv';
-import * as fs from 'fs';
-import * as path from 'path';
+// import * as fs from 'fs';
+// import * as path from 'path';
 dotenv.config();
 
 @Module({
@@ -21,7 +21,6 @@ dotenv.config();
       entities: [
         PairUsdJpy
       ],
-      connectTimeout: 10000,
     }),
     TypeOrmModule.forFeature([PairUsdJpy]),
   ],

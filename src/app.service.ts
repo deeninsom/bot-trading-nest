@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import MetaApi from 'metaapi.cloud-sdk';
+import MetaApi, { MetatraderAccount } from 'metaapi.cloud-sdk';
 import { Repository } from 'typeorm';
 import Candles from './app.entity';
 
@@ -23,6 +23,7 @@ export class AppService implements OnModuleInit {
     const dataCandle = await this.fetchCandleFromDatabase()
     this.calculateRSI(dataCandle, 14, streamConnection);
     this.scheduleNextFetch(account, metaApi, streamConnection)
+
   }
 
   async initializeMetaApi() {
@@ -36,6 +37,11 @@ export class AppService implements OnModuleInit {
     }
 
     await account.waitConnected();
+    // streamConnection.historyStorage.historyOrders.map((value) => {
+    //   const orderHistory = streamConnection.historyStorage.getHistoryOrdersByPosition(`${value.positionId}`);
+    //   console.log(orderHistory)
+    // })
+
 
     return { account, metaApi, streamConnection }
   }
@@ -265,7 +271,7 @@ export class AppService implements OnModuleInit {
       const orderType = orderHistory[0].type;
 
       // Calculate TP and SL
-      const tp = orderType !== 'ORDER_TYPE_BUY' ? executedPrice - 0.080 : executedPrice + 0.080;
+      const tp = orderType !== 'ORDER_TYPE_BUY' ? executedPrice - 0.200 : executedPrice + 0.200;
       const sl = orderType !== 'ORDER_TYPE_BUY' ? executedPrice + 0.060 : executedPrice - 0.060;
 
       await this.setTakeProfit(connection, orderHistory[0]?.id, tp.toFixed(3), sl.toFixed(3));
