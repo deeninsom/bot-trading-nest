@@ -37,6 +37,11 @@ export class AppService implements OnModuleInit {
     }
 
     await account.waitConnected();
+
+    // const historyStorage = streamConnection.historyStorage;
+    // console.log('deals for the last day:', historyStorage.getDealsByTimeRange(new Date(Date.now() - 24 * 60 * 60 * 1000),
+    // new Date()));
+    // console.log('deals:', historyStorage.deals.slice(-5));
     // streamConnection.historyStorage.historyOrders.map((value) => {
     //   const orderHistory = streamConnection.historyStorage.getHistoryOrdersByPosition(`${value.positionId}`);
     //   console.log(orderHistory)
