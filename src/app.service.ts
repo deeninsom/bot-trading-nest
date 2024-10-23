@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import MetaApi, { MetatraderAccount } from 'metaapi.cloud-sdk';
+import MetaApi from 'metaapi.cloud-sdk';
 import { Repository } from 'typeorm';
 import Candles from './app.entity';
 
@@ -23,7 +23,6 @@ export class AppService implements OnModuleInit {
     const dataCandle = await this.fetchCandleFromDatabase()
     this.calculateRSI(dataCandle, 14, streamConnection);
     this.scheduleNextFetch(account, metaApi, streamConnection)
-
   }
 
   async initializeMetaApi() {
@@ -56,6 +55,26 @@ export class AppService implements OnModuleInit {
     // this.saveHistoryCandles(candlesOctober)
     return candles
   }
+
+  calculateTrend(candles: any[]): string {
+    const recentCandles = candles.slice(-100); // Get the last 5 candles
+    let upTrend = true;
+    let downTrend = true;
+
+    for (let i = 1; i < recentCandles.length; i++) {
+      if (recentCandles[i].close <= recentCandles[i - 1].close) {
+        upTrend = false; // If any candle is lower or equal to the previous one, it's not an uptrend
+      }
+      if (recentCandles[i].close >= recentCandles[i - 1].close) {
+        downTrend = false; // If any candle is higher or equal to the previous one, it's not a downtrend
+      }
+    }
+
+    if (upTrend) return 'uptrend';
+    if (downTrend) return 'downtrend';
+    return 'sideways'; // No clear trend detected
+  }
+
 
   async saveHistoryCandles(payload: any) {
     if (!payload || payload.length === 0) {
@@ -106,32 +125,30 @@ export class AppService implements OnModuleInit {
     let gains = 0;
     let losses = 0;
 
-    // Hitung total gains dan losses selama periode
     for (let i = candles.length - period; i < candles.length - 1; i++) {
       const change = candles[i + 1].close - candles[i].close;
       if (change > 0) {
         gains += change;
       } else {
-        losses -= change; // Mengurangi karena losses adalah nilai negatif
+        losses -= change;
       }
     }
 
-    // Menghindari pembagian dengan nol
     const averageGain = gains / period;
     const averageLoss = losses / period;
 
-    // RS adalah rasio dari rata-rata gain terhadap rata-rata loss
-    const rs = averageLoss === 0 ? 0 : averageGain / averageLoss; // Jika averageLoss adalah 0, set RS ke 0
+    const rs = averageLoss === 0 ? 0 : averageGain / averageLoss;
 
-    const rsi = averageLoss === 0 ? 100 : 100 - (100 / (1 + rs)); // Jika tidak ada kerugian, RSI adalah 100
+    const rsi = averageLoss === 0 ? 100 : 100 - (100 / (1 + rs));
 
-    console.log('Calculated RSI:', rsi);
+    console.log('---------------------------')
     console.log('Total Gains:', gains);
     console.log('Total Losses:', losses);
     console.log('Average Gain:', averageGain);
     console.log('Average Loss:', averageLoss);
     console.log('RS:', rs);
     console.log('Calculated RSI:', rsi);
+    console.log('---------------------------')
     this.checkOverboughtOversold(rsi, candles, connection);
     return rsi;
   }
@@ -144,38 +161,37 @@ export class AppService implements OnModuleInit {
       return;
     }
 
+    const trend = this.calculateTrend(candles);
     const currentCandleIndex = candles.length - 1;
-    const previousCandleIndex = candles.length - 2;
-
+    const previousCandleIndex = candles.length - 3;
 
     if (currentCandleIndex < 1) {
       console.log('Not enough candles to check for confirmation.');
       return;
     }
 
-    // Check for oversold condition
+    console.log('Trend : ', trend)
+
     if (rsi <= 30) {
-      if (candles[currentCandleIndex].close > candles[previousCandleIndex].close) {
-        console.log(candles[currentCandleIndex].close)
-        console.log(candles[previousCandleIndex].close)
+      if (candles[currentCandleIndex].close > candles[previousCandleIndex].open) {
         console.log('Market is oversold and confirmed by the current candle being higher than the previous candle.');
-        this.executeTrade('buy', connection)
+        this.executeTrade('buy', connection);
+        // if (trend === 'uptrend') {
+        // } else {
+        //   console.log('No buy signal due to trend being not bullish.');
+        // }
       } else {
-        console.log(candles[currentCandleIndex].close)
-        console.log(candles[previousCandleIndex].close)
         console.log('Market is oversold but no confirmation from the current candle.');
       }
-    }
-    // Check for overbought condition
-    else if (rsi >= 70) {
-      if (candles[currentCandleIndex].close < candles[previousCandleIndex].close) {
-        console.log(candles[currentCandleIndex].close)
-        console.log(candles[previousCandleIndex].close)
+    } else if (rsi >= 70) {
+      if (candles[currentCandleIndex].open < candles[previousCandleIndex].close) {
         console.log('Market is overbought and confirmed by the current candle being lower than the previous candle.');
-        this.executeTrade('sell', connection)
+        this.executeTrade('sell', connection);
+        // if (trend === 'downtrend') {
+        // } else {
+        //   console.log('No sell signal due to trend being not bearish.');
+        // }
       } else {
-        console.log(candles[currentCandleIndex].close)
-        console.log(candles[previousCandleIndex].close)
         console.log('Market is overbought but no confirmation from the current candle.');
       }
     } else {
@@ -184,16 +200,16 @@ export class AppService implements OnModuleInit {
   }
 
 
+
   async executeTrade(openMarket, connection) {
     if (!connection) {
       console.error('Connection is not defined. Cannot execute trade.');
-      return; // Exit if the connection is not valid
+      return;
     }
 
     let orderResponse;
 
     try {
-      // Attempt to create a market order
       switch (openMarket) {
         case 'buy':
           orderResponse = await connection.createMarketBuyOrder(this.pair, this.volume);
@@ -205,25 +221,21 @@ export class AppService implements OnModuleInit {
 
         default:
           console.log('Open market is invalid. Must be "buy" or "sell".');
-          return; // Exit if the market type is invalid
+          return;
       }
 
-      // Wait briefly to ensure the order is recorded
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const orderHistory = await connection.historyStorage.getHistoryOrdersByPosition(`${orderResponse.positionId}`);
 
-      // Check if there are any orders in history
       if (!orderHistory || orderHistory.length === 0) {
         console.error('No order history found. Cannot set TP.');
         return; // Exit if there is no order history
       }
 
-      // Get the price after the order is executed
       const executedPrice = orderHistory[0]?.openPrice;
       const orderType = orderHistory[0].type;
 
-      // Calculate TP and SL
       const tp = orderType !== 'ORDER_TYPE_BUY' ? executedPrice - 0.200 : executedPrice + 0.200;
       const sl = orderType !== 'ORDER_TYPE_BUY' ? executedPrice + 0.060 : executedPrice - 0.060;
 
@@ -231,18 +243,15 @@ export class AppService implements OnModuleInit {
 
     } catch (error) {
       console.error('An error occurred while executing the trade:', error);
-      // Optionally, log the error and continue with the next operation
     }
   }
 
 
   async setTakeProfit(connection: any, orderId: any, tp: any, sl: any) {
     try {
-      // Pastikan tp dan sl adalah angka
       const takeProfit = Number(tp);
       const stopLoss = Number(sl);
 
-      // Cek apakah konversi berhasil
       if (isNaN(takeProfit) || isNaN(stopLoss)) {
         console.error('Take Profit or Stop Loss is not a valid number.');
         return; // Keluar jika tidak valid
@@ -261,8 +270,9 @@ export class AppService implements OnModuleInit {
   scheduleNextFetch(account, metaApi, streamConnection) {
     const now: any = new Date();
 
-    const nextFiveMinutes: any = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), Math.floor(now.getMinutes() / 5) * 5 + 5, 0, 0);
-    const timeout = nextFiveMinutes - now;
+    // const nextFiveMinutes: any = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), Math.floor(now.getMinutes() / 5) * 5 + 5, 0, 0);
+    const nextMinute : any= new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), now.getMinutes() + 1, 0, 0);
+    const timeout = nextMinute - now;
 
     setTimeout(async () => {
       const { account, metaApi, streamConnection } = await this.initializeMetaApi()
