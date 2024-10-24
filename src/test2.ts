@@ -48,12 +48,12 @@ export class TestService implements OnModuleInit {
     const candles = await account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
     this.saveHistoryCandles(candles);
 
-// const startOctober = new Date(currentWIBTime.getFullYear(), 10, 23); // Bulan Oktober
-  //   const endOctober = new Date(currentWIBTime.getFullYear(), 10, 24); // 1 November
+    // const startOctober = new Date(currentWIBTime.getFullYear(), 10, 24); // Bulan Oktober
+    // const endOctober = new Date(currentWIBTime.getFullYear(), 10, 25) // 1 November
 
     // const candlesOctober = await account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
 
-    //this.saveHistoryCandles(candlesOctober)
+    // this.saveHistoryCandles(candlesOctober)
 
     return candles;
   }
@@ -123,20 +123,25 @@ export class TestService implements OnModuleInit {
     const trend = this.analyzeTrend(candles);
     console.log(`Current trend: ${trend}`);
 
+    // console.log(currentPrice.toFixed(1))
     // Trading Logic
     if (trend === 'uptrend') {
-      if (currentPrice < lowerBand) {
+      if (currentPrice.toFixed(1) <= lowerBand.toFixed(1)) {
+        console.log('In an uptrend. Price is below lower Bollinger Band. Consider buying.');
+        this.executeTrade('buy', connection);
+      } else if (currentPrice.toFixed(1) <= middleBand.toFixed(1)) {
         console.log('In an uptrend. Price is below lower Bollinger Band. Consider buying.');
         this.executeTrade('buy', connection);
       } else {
         console.log('Price is within the Bollinger Bands in an uptrend. No trade opportunity.');
       }
     } else if (trend === 'downtrend') {
-      if (currentPrice > upperBand) {
+      if (currentPrice.toFixed(1) >= upperBand.toFixed(1)) {
         console.log('In a downtrend. Price is above upper Bollinger Band. Consider selling.');
         this.executeTrade('sell', connection);
-      } else if (currentPrice < lowerBand) {
-        console.log('In a downtrend. Price is below lower Bollinger Band. Consider waiting for a confirmation before buying.');
+      } else if ((currentPrice.toFixed(1) >= middleBand.toFixed(1))) {
+        console.log('In a downtrend. Price is above middle Bollinger Band. Consider selling.');
+        this.executeTrade('sell', connection);
       } else {
         console.log('Price is within the Bollinger Bands in a downtrend. No trade opportunity.');
       }
@@ -147,7 +152,9 @@ export class TestService implements OnModuleInit {
   }
 
   analyzeTrend(candles: any[]) {
-    const closingPrices = candles.map(candle => Number(candle.close));
+    const last100Candles = candles.slice(-100);
+
+    const closingPrices = last100Candles.map(candle => Number(candle.close));
 
     // Hitung pergerakan harga dan ambil rata-rata
     const priceChanges = closingPrices.map((price, index) => index === 0 ? 0 : price - closingPrices[index - 1]);
