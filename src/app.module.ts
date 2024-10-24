@@ -15,12 +15,12 @@ dotenv.config();
   imports: [
     TypeOrmModule.forRoot({
       type: 'mysql',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.PORT, 10),
-      username: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || 'jodi',
-      database: process.env.DB_NAME || 'trading',
-      synchronize: Boolean(process.env.SYNC_DB),
+      host: '127.0.0.1',
+      port: 3306,
+      username: 'jodi',
+      password: 'jodi',
+      database: 'trading',
+      synchronize: false,
       entities: [
         PairUsdJpy
       ],
