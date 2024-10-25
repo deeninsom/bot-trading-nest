@@ -19,7 +19,7 @@ export class TestNewService implements OnModuleInit {
   constructor(
     @InjectRepository(Candles)
     private pairRepository: Repository<Candles>,
-  ) {}
+  ) { }
 
   public async onModuleInit() {
     try {
@@ -37,7 +37,7 @@ export class TestNewService implements OnModuleInit {
     const metaApi = new MetaApi(this.token);
     const account = await metaApi.metatraderAccountApi.getAccount(this.accountId);
     const streamConnection = account.getStreamingConnection();
-    
+
     await streamConnection.connect();
 
     if (account.state !== 'DEPLOYED') {
@@ -57,12 +57,12 @@ export class TestNewService implements OnModuleInit {
       const startTime = new Date(currentWIBTime.getTime() - (60 * 60 * 1000)); // 1 hour ago
       const candles = await account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
 
-          // const startOctober = new Date(currentWIBTime.getFullYear(), 10, 25); // Bulan Oktober
-    // const endOctober = new Date(currentWIBTime.getFullYear(), 10, 26) // 1 November
+      // const startOctober = new Date(currentWIBTime.getFullYear(), 10, 25); // Bulan Oktober
+      // const endOctober = new Date(currentWIBTime.getFullYear(), 10, 26) // 1 November
 
-    // const candlesOctober = await account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
+      // const candlesOctober = await account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
 
-    // this.saveHistoryCandles(candlesOctober)
+      // this.saveHistoryCandles(candlesOctober)
       await this.saveHistoryCandles(candles);
       return candles;
     } catch (error) {
@@ -217,7 +217,7 @@ export class TestNewService implements OnModuleInit {
 
       const executedPrice = orderHistory[0].openPrice;
       const orderType = orderHistory[0].type;
-      const tp = orderType !== 'ORDER_TYPE_BUY' ? executedPrice - 0.200 : executedPrice + 0.200;
+      const tp = orderType !== 'ORDER_TYPE_BUY' ? executedPrice - 0.080 : executedPrice + 0.080;
       const sl = orderType !== 'ORDER_TYPE_BUY' ? executedPrice + 0.100 : executedPrice - 0.100;
 
       await connection.modifyPosition(orderHistory[0].id, null, tp);
