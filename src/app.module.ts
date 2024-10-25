@@ -49,7 +49,7 @@ dotenv.config();
     TypeOrmModule.forRoot({
       type: 'mysql',
       url: 'mysql://avnadmin:AVNS_AWdlIJZKwwWtjFw2hoA@mysql-3fb47401-syihabuddin22.c.aivencloud.com:11856/trading?ssl-mode=REQUIRED',
-      synchronize: true,
+      synchronize: false,
       ssl: {
         rejectUnauthorized: false
       },
