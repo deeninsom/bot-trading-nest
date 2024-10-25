@@ -48,8 +48,8 @@ export class TestService implements OnModuleInit {
     const candles = await account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
     this.saveHistoryCandles(candles);
 
-    // const startOctober = new Date(currentWIBTime.getFullYear(), 10, 24); // Bulan Oktober
-    // const endOctober = new Date(currentWIBTime.getFullYear(), 10, 25) // 1 November
+    // const startOctober = new Date(currentWIBTime.getFullYear(), 10, 25); // Bulan Oktober
+    // const endOctober = new Date(currentWIBTime.getFullYear(), 10, 26) // 1 November
 
     // const candlesOctober = await account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
 
@@ -116,7 +116,7 @@ export class TestService implements OnModuleInit {
     const upperBand = middleBand + (this.bbStdDev * stdDev);
     const lowerBand = middleBand - (this.bbStdDev * stdDev);
     const currentPrice = closingPrices[closingPrices.length - 1];
-
+    
     console.log(`Middle Band: ${middleBand.toFixed(3)}, Upper Band: ${upperBand.toFixed(3)}, Lower Band: ${lowerBand.toFixed(3)}, Current Price: ${currentPrice.toFixed(3)}`);
 
     // Analyze Trend
@@ -126,21 +126,15 @@ export class TestService implements OnModuleInit {
     // console.log(currentPrice.toFixed(1))
     // Trading Logic
     if (trend === 'uptrend') {
-      if (currentPrice.toFixed(1) <= lowerBand.toFixed(1)) {
-        console.log('In an uptrend. Price is below lower Bollinger Band. Consider buying.');
-        this.executeTrade('buy', connection);
-      } else if (currentPrice.toFixed(1) <= middleBand.toFixed(1)) {
+      if (currentPrice.toFixed(3) < lowerBand.toFixed(3)) {
         console.log('In an uptrend. Price is below lower Bollinger Band. Consider buying.');
         this.executeTrade('buy', connection);
       } else {
         console.log('Price is within the Bollinger Bands in an uptrend. No trade opportunity.');
       }
     } else if (trend === 'downtrend') {
-      if (currentPrice.toFixed(1) >= upperBand.toFixed(1)) {
+      if (currentPrice.toFixed(3) > upperBand.toFixed(3)) {
         console.log('In a downtrend. Price is above upper Bollinger Band. Consider selling.');
-        this.executeTrade('sell', connection);
-      } else if ((currentPrice.toFixed(1) >= middleBand.toFixed(1))) {
-        console.log('In a downtrend. Price is above middle Bollinger Band. Consider selling.');
         this.executeTrade('sell', connection);
       } else {
         console.log('Price is within the Bollinger Bands in a downtrend. No trade opportunity.');
@@ -152,7 +146,7 @@ export class TestService implements OnModuleInit {
   }
 
   analyzeTrend(candles: any[]) {
-    const last100Candles = candles.slice(-100);
+    const last100Candles = candles.slice(-200);
 
     const closingPrices = last100Candles.map(candle => Number(candle.close));
 
@@ -231,7 +225,7 @@ export class TestService implements OnModuleInit {
       console.log(`Order ID: ${orderId}`);
       console.log(`Setting TP: ${takeProfit}, SL: ${stopLoss}`);
 
-      await connection.modifyPosition(orderId, stopLoss, takeProfit);
+      await connection.modifyPosition(orderId, null, takeProfit);
       console.log(`Take Profit for order ${orderId} set to ${takeProfit} and Stop Loss set to ${stopLoss}`);
     } catch (err) {
       console.error('Error setting take profit:', err);
