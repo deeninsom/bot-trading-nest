@@ -56,6 +56,13 @@ export class TestNewService implements OnModuleInit {
       const currentWIBTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
       const startTime = new Date(currentWIBTime.getTime() - (60 * 60 * 1000)); // 1 hour ago
       const candles = await account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
+
+          // const startOctober = new Date(currentWIBTime.getFullYear(), 10, 25); // Bulan Oktober
+    // const endOctober = new Date(currentWIBTime.getFullYear(), 10, 26) // 1 November
+
+    // const candlesOctober = await account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
+
+    // this.saveHistoryCandles(candlesOctober)
       await this.saveHistoryCandles(candles);
       return candles;
     } catch (error) {
