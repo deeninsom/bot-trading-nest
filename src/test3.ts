@@ -25,8 +25,8 @@ export class TestNewService implements OnModuleInit {
     try {
       const { account, metaApi, streamConnection } = await this.initializeMetaApi();
       await this.fetchLastCandleHistories(account);
-      const dataCandle = await this.fetchCandleFromDatabase();
-      this.checkForTradeOpportunity(dataCandle, streamConnection);
+      // const dataCandle = await this.fetchCandleFromDatabase();
+      // this.checkForTradeOpportunity(dataCandle, streamConnection);
       this.scheduleNextFetch(account, metaApi, streamConnection);
     } catch (error) {
       this.logger.error('Error during module initialization', error);
@@ -36,6 +36,41 @@ export class TestNewService implements OnModuleInit {
   async initializeMetaApi() {
     const metaApi = new MetaApi(this.token);
     const account = await metaApi.metatraderAccountApi.getAccount(this.accountId);
+    // const rpc = account.getRPCConnection()
+    // await rpc.connect()
+
+    // const price : any= await rpc.getSymbolPrice(this.pair, true);
+
+    // // Fungsi untuk konversi waktu ke zona WIB (UTC+7)
+    // const toWIB = (dateString: string) => {
+    //   const date = new Date(dateString);
+    //   date.setHours(date.getHours() + 7);
+    //   return date.toISOString().replace('T', ' ').replace('Z', '');
+    // };
+    
+    // // Tampilkan data harga dengan waktu yang telah diubah ke zona WIB
+    // console.log({
+    //   time: toWIB(price.time),
+    //   brokerTime: toWIB(price.brokerTime),
+    //   symbol: price.symbol,
+    //   ask: price.ask,
+    //   bid: price.bid,
+    //   accountCurrencyExchangeRate: price.accountCurrencyExchangeRate,
+    //   profitTickValue: price.profitTickValue,
+    //   lossTickValue: price.lossTickValue,
+    //   timestamps: {
+    //     eventGenerated: toWIB(price.timestamps.eventGenerated),
+    //     serverProcessingStarted: toWIB(price.timestamps.serverProcessingStarted)
+    //   },
+    //   equity: price.equity
+    // });
+
+    // const now = new Date();
+    // const currentWIBTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+    // const startTime = new Date(currentWIBTime.getTime() - (60 * 60 * 1000)); // 1 hour ago
+    // const candles = await account.getHistoricalCandles(this.pair, '5m', startTime, 0);
+    // console.log(candles)
+
     const streamConnection = account.getStreamingConnection();
 
     await streamConnection.connect();
@@ -54,17 +89,18 @@ export class TestNewService implements OnModuleInit {
     try {
       const now = new Date();
       const currentWIBTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      const startTime = new Date(currentWIBTime.getTime() - (60 * 60 * 1000)); // 1 hour ago
-      const candles = await account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
+      // const startTime = new Date(currentWIBTime.getTime() - (60 * 60 * 1000)); // 1 hour ago
+      // const candles = await account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
+      // // console.log(candles)
 
-      // const startOctober = new Date(currentWIBTime.getFullYear(), 10, 25); // Bulan Oktober
-      // const endOctober = new Date(currentWIBTime.getFullYear(), 10, 26) // 1 November
+      const startOctober = new Date(currentWIBTime.getFullYear(), 10, 25); // Bulan Oktober
+      const endOctober = new Date(currentWIBTime.getFullYear(), 10, 28) // 1 November
 
-      // const candlesOctober = await account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
+      const candlesOctober = await account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
 
-      // this.saveHistoryCandles(candlesOctober)
-      await this.saveHistoryCandles(candles);
-      return candles;
+      this.saveHistoryCandles(candlesOctober)
+      // await this.saveHistoryCandles(candles);
+      // return candles;
     } catch (error) {
       this.logger.error('Error fetching candle histories', error);
     }

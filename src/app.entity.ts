@@ -29,6 +29,9 @@ export default class Candles {
   @Column({ type: 'int', nullable: true })
   tickVolume: number;
 
+  // @Column({ type: 'boolean', nullable: false })
+  // isGreen: boolean;
+
   @CreateDateColumn()
   public created_at: Date;
 

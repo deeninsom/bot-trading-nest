@@ -51,7 +51,7 @@ export class TestService implements OnModuleInit {
     // const startOctober = new Date(currentWIBTime.getFullYear(), 10, 25); // Bulan Oktober
     // const endOctober = new Date(currentWIBTime.getFullYear(), 10, 26) // 1 November
 
-    // const candlesOctober = await account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
+    // const candlesOctober await account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
 
     // this.saveHistoryCandles(candlesOctober)
 
