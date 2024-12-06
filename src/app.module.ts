@@ -4,6 +4,9 @@ import PairUsdJpy from './app.entity';
 import * as dotenv from 'dotenv';
 import { TestNewService } from './test3';
 import { BacktestService } from './backtest-bb.service';
+import { LstmService } from './lstm';
+import { BSService } from './bs';
+import { BotService } from './bot';
 dotenv.config();
 
 @Module({
@@ -21,6 +24,6 @@ dotenv.config();
     }),
     TypeOrmModule.forFeature([PairUsdJpy]),
   ],
-  providers: [BacktestService],
+  providers: [BotService],
 })
 export class AppModule {}

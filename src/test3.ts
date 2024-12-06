@@ -25,7 +25,8 @@ export class TestNewService implements OnModuleInit {
     try {
       const { account, metaApi, streamConnection } = await this.initializeMetaApi();
       await this.fetchLastCandleHistories(account);
-      // const dataCandle = await this.fetchCandleFromDatabase();
+      const dataCandle = await this.fetchCandleFromDatabase();
+        
       // this.checkForTradeOpportunity(dataCandle, streamConnection);
       this.scheduleNextFetch(account, metaApi, streamConnection);
     } catch (error) {
@@ -89,18 +90,18 @@ export class TestNewService implements OnModuleInit {
     try {
       const now = new Date();
       const currentWIBTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      // const startTime = new Date(currentWIBTime.getTime() - (60 * 60 * 1000)); // 1 hour ago
-      // const candles = await account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
+      const startTime = new Date(currentWIBTime.getTime() - (60 * 60 * 1000)); // 1 hour ago
+      const candles = await account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
       // // console.log(candles)
 
-      const startOctober = new Date(currentWIBTime.getFullYear(), 10, 25); // Bulan Oktober
-      const endOctober = new Date(currentWIBTime.getFullYear(), 10, 28) // 1 November
+      // const startOctober = new Date(currentWIBTime.getFullYear(), 10, 25); // Bulan Oktober
+      // const endOctober = new Date(currentWIBTime.getFullYear(), 10, 28) // 1 November
 
-      const candlesOctober = await account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
+      // const candlesOctober = await account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
 
-      this.saveHistoryCandles(candlesOctober)
-      // await this.saveHistoryCandles(candles);
-      // return candles;
+      // this.saveHistoryCandles(candlesOctober)
+      await this.saveHistoryCandles(candles);
+      return candles;
     } catch (error) {
       this.logger.error('Error fetching candle histories', error);
     }
@@ -254,7 +255,7 @@ export class TestNewService implements OnModuleInit {
       const executedPrice = orderHistory[0].openPrice;
       const orderType = orderHistory[0].type;
       const tp = orderType !== 'ORDER_TYPE_BUY' ? executedPrice - 0.080 : executedPrice + 0.080;
-      const sl = orderType !== 'ORDER_TYPE_BUY' ? executedPrice + 0.100 : executedPrice - 0.100;
+      const sl = orderType !== 'ORDER_TYPE_BUY' ? executedPrice + 0.030 : executedPrice - 0.030;
 
       await connection.modifyPosition(orderHistory[0].id, null, tp);
       this.logger.log(`Take Profit for order ${orderHistory[0].id} set to ${tp.toFixed(3)} and Stop Loss set to ${sl.toFixed(3)}`);
