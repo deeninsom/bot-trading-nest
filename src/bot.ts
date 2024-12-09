@@ -27,7 +27,7 @@ export class BotService implements OnModuleInit {
 
     // Fetch the last candle history once
     await this.fetchLastCandleHistories(account);
-    this.cekOrderOpened(streamConnection)
+    // this.cekOrderOpened(streamConnection)
     this.analyzeTrend()
     // Schedule the next fetch operation
     this.scheduleNextFetch(account, streamConnection);
@@ -115,11 +115,11 @@ export class BotService implements OnModuleInit {
 
       // Menggunakan query builder untuk mencari data candle dalam rentang waktu bulan ini
       const candles = await this.priceRepository
-        .createQueryBuilder('candle')  // 'candle' adalah alias untuk tabel harga
+        .createQueryBuilder('candle') 
         .where('candle.time >= :startOfMonth', { startOfMonth })
         .andWhere('candle.time <= :endOfMonth', { endOfMonth })
-        .orderBy('candle.time', 'ASC')  // Mengurutkan berdasarkan waktu
-        .getMany();  // Mengambil hasil dalam bentuk array
+        .orderBy('candle.time', 'ASC') 
+        .getMany();  
 
       return candles;
     } catch (error) {
@@ -154,91 +154,129 @@ export class BotService implements OnModuleInit {
 
   async analyzeTrend(): Promise<string> {
     try {
-      // Fetch the latest candles from the database
+      // Ambil data candle terbaru dari database
       const candles = await this.fetchCandleFromDatabase();
       if (candles.length < 2) {
-        this.logger.warn('Not enough candle data for trend analysis.');
+        this.logger.warn('Data candle tidak cukup untuk analisis tren.');
         return 'Not enough data';
       }
-
-      // Calculate the 20-period EMA
-      const ema20 = await this.calculateEMA(20, candles);
-
-      // Get the latest closing price
+  
+      // Hitung EMA dengan periode 50
+      const ema50 = await this.calculateEMA(50, candles);
+  
+      // Ambil harga penutupan terbaru
       const latestCandle = candles[candles.length - 1];
       const currentPrice = Number(latestCandle.close);
-      // await this.openSellPosition();
-      // Analyze the trend based on the comparison of price and EMA
-      if (currentPrice > ema20) {
-        this.logger.log('Uptrend: Current price is above the 20-period EMA');
-        return 'UP'; // Uptrend when price > EMA 20
-      } else if (currentPrice < ema20) {
-        this.logger.log('Downtrend: Current price is below the 20-period EMA');
-        return 'DOWN'; // Downtrend when price < EMA 20
+  
+      // Analisis tren berdasarkan perbandingan harga dan EMA
+      let trend = 'NEUTRAL';
+      if (currentPrice.toFixed(3) > ema50.toFixed(3)) {
+        this.logger.log('Uptrend: Harga saat ini di atas EMA 50');
+        trend = 'UP'; // Tren naik jika harga > EMA 50
+      } else if (currentPrice.toFixed(3) < ema50.toFixed(3)) {
+        this.logger.log(`Downtrend: Harga saat ini di bawah EMA 50 ${ema50.toFixed(3)}`);
+        trend = 'DOWN'; // Tren turun jika harga < EMA 50
       } else {
-        this.logger.log('Neutral: Current price equals the 20-period EMA');
-        return 'NEUTRAL'; // Neutral when price equals EMA 20
+        this.logger.log(`Neutral: Harga saat ini sama dengan EMA 50 ${ema50.toFixed(3)}`);
       }
+      // await this.openSellPosition(currentPrice);
+      // Periksa apakah harga mendekati EMA (pullback)
+      await this.checkPullback(trend, ema50, currentPrice);
+  
+      return trend;
     } catch (error) {
-      this.logger.error('Error analyzing trend', error);
+      this.logger.error('Error saat menganalisis tren', error);
       return 'Error';
     }
   }
+  
 
-  async checkPullback(trend: string, ema20: number, currentPrice: number) {
+  async checkPullback(trend: string, ema50: any, currentPrice: any) {
     try {
-      // Threshold to consider as a "pullback" to the EMA
-      const pullbackThreshold = 0.001; // Adjust this value based on your strategy
-      const cekOrder = this.cekOrderOpened
+      // Ambang batas untuk mempertimbangkan harga "mendekati" EMA
+      const pullbackThreshold = 0.010; // Sesuaikan nilai ini sesuai strategi Anda
+    
+      // Mengonversi harga dan EMA ke angka setelah dipotong menjadi 3 desimal
+      const price = parseFloat(currentPrice.toFixed(3));
+      const ema = parseFloat(ema50.toFixed(3));
+  
+      // Periksa apakah harga mendekati EMA dalam ambang batas
+      const isApproachingEMA = Math.abs(price - ema) < pullbackThreshold;
+    
+      if (isApproachingEMA) {
+        this.logger.log(`Harga mendekati EMA: Harga saat ini ${price}, EMA50 ${ema}`);
+      }
+    
+      // Logika untuk mendeteksi pullback yang sudah ada
+      // if (trend === 'UP' && price <= ema && isApproachingEMA) {
+      //   this.logger.log('Uptrend: Harga kembali ke EMA, mempertimbangkan buy...');
+      //   const cekOrder = await this.cekOrderOpened(this.connection);
+      //   if (cekOrder) {
+      //     await this.openBuyPosition(price);
+      //   }
+      // } else if (trend === 'DOWN' && price >= ema && isApproachingEMA) {
+      //   this.logger.log('Downtrend: Harga kembali ke EMA, mempertimbangkan sell...');
+      //   const cekOrder = await this.cekOrderOpened(this.connection);
+      //   if (cekOrder) {
+      //     await this.openSellPosition(price);
+      //   }
+      // }
 
-      if (trend === 'UP' && currentPrice < ema20 && Math.abs(currentPrice - ema20) < pullbackThreshold) {
-        this.logger.log('Uptrend: Price pulled back to EMA, considering buy...');
+      if (trend === 'UP'  && isApproachingEMA) {
+        this.logger.log('Uptrend: Harga kembali ke EMA, mempertimbangkan buy...');
+        const cekOrder = await this.cekOrderOpened(this.connection);
         if (cekOrder) {
-          await this.openBuyPosition();
+          await this.openBuyPosition(price);
         }
-      } else if (trend === 'DOWN' && currentPrice > ema20 && Math.abs(currentPrice - ema20) < pullbackThreshold) {
-        this.logger.log('Downtrend: Price pulled back to EMA, considering sell...');
+      } else if (trend === 'DOWN' &&  isApproachingEMA) {
+        this.logger.log('Downtrend: Harga kembali ke EMA, mempertimbangkan sell...');
+        const cekOrder = await this.cekOrderOpened(this.connection);
         if (cekOrder) {
-          await this.openSellPosition();
+          await this.openSellPosition(price);
         }
       }
     } catch (error) {
-      this.logger.error('Error checking for pullback', error);
+      this.logger.error('Error saat memeriksa pullback', error);
     }
   }
+  
 
-  async openBuyPosition() {
+  async openBuyPosition(currentPrice: any) {
     try {
       const order = await this.connection.createMarketBuyOrder(this.pair, this.volume);
       this.logger.log('Buy position opened:', order);
-      await this.setTPandSL(order, 'buy');
+      await this.setTPandSL(order, 'buy', currentPrice);
     } catch (error) {
       this.logger.error('Error opening buy position', error);
     }
   }
 
-  async openSellPosition() {
+  async openSellPosition(currentPrice: any) {
     try {
       const order = await this.connection.createMarketSellOrder(this.pair, this.volume);
       this.logger.log('Sell position opened:', order);
-      await this.setTPandSL(order, 'sell');
+      await this.setTPandSL(order, 'sell', currentPrice);
     } catch (error) {
       this.logger.error('Error opening sell position', error);
     }
   }
 
-  async setTPandSL(order: any, type: any) {
-    console.log(order)
+  async setTPandSL(order: any, type: any, currentPrice: any) {
     try {
-      const tpPrice = type === 'sell' ? order.price - this.targetTP : order.price + this.targetTP;
-      const slPrice = type === 'sell' ? order.price + this.targetTP : order.price - this.targetTP;
+      const price : any= Number(currentPrice)
+
+      const tpPrice = type === 'sell' ? price - this.targetTP : price + this.targetTP;
+      const slPrice = type === 'sell' ? price + this.stopLoss : price - this.stopLoss;
+      
+      console.log(order.orderId, slPrice.toFixed(3), tpPrice.toFixed(3), price)
+      await new Promise(resolve => setTimeout(resolve, 2000));
       await this.connection.modifyPosition(order.orderId, slPrice, tpPrice);
-      // await this.connection.setStopLoss(order.id, slPrice);
       this.logger.log('Take profit and stop loss set.');
     } catch (error) {
       this.logger.error('Error setting TP/SL', error);
     }
   }
+
   scheduleNextFetch(account: any, streamConnection: any) {
     const now = new Date();
     const nextFiveMinutes = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), Math.floor(now.getMinutes() / 5) * 5 + 5, 0, 0);
@@ -247,7 +285,7 @@ export class BotService implements OnModuleInit {
     setTimeout(async () => {
       // Fetch the last candle histories periodically (every 5 minutes)
       await this.fetchLastCandleHistories(account);
-      this.cekOrderOpened(streamConnection)
+      // this.cekOrderOpened(streamConnection)
       this.analyzeTrend()
       // Schedule the next fetch operation
       this.scheduleNextFetch(account, streamConnection);
