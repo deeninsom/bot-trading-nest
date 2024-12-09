@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import Candles from './app.entity';
 import MetaApi from 'metaapi.cloud-sdk';
-import * as tf from '@tensorflow/tfjs-node';
 
 @Injectable()
 export class LstmService implements OnModuleInit {

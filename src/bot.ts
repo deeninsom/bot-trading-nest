@@ -7,8 +7,8 @@ import MetaApi from 'metaapi.cloud-sdk';
 @Injectable()
 export class BotService implements OnModuleInit {
   private readonly logger = new Logger(BotService.name);
-  private readonly targetTP = 0.080; // Target TP
-  private readonly stopLoss = 0.030; // Target Stop Loss
+  private readonly targetTP = 0.120; // Target TP
+  private readonly stopLoss = 0.070; // Target Stop Loss
   private volume = 0.01;
   private pair = 'USDJPY';
   private token = process.env.TOKEN;
@@ -116,8 +116,8 @@ export class BotService implements OnModuleInit {
       // Menggunakan query builder untuk mencari data candle dalam rentang waktu bulan ini
       const candles = await this.priceRepository
         .createQueryBuilder('candle') 
-        .where('candle.time >= :startOfMonth', { startOfMonth })
-        .andWhere('candle.time <= :endOfMonth', { endOfMonth })
+        // .where('candle.time >= :startOfMonth', { startOfMonth })
+        // .andWhere('candle.time <= :endOfMonth', { endOfMonth })
         .orderBy('candle.time', 'ASC') 
         .getMany();  
 
@@ -152,37 +152,34 @@ export class BotService implements OnModuleInit {
   }
 
 
+
   async analyzeTrend(): Promise<string> {
     try {
-      // Ambil data candle terbaru dari database
       const candles = await this.fetchCandleFromDatabase();
       if (candles.length < 2) {
         this.logger.warn('Data candle tidak cukup untuk analisis tren.');
         return 'Not enough data';
       }
-  
-      // Hitung EMA dengan periode 50
+
       const ema50 = await this.calculateEMA(50, candles);
-  
-      // Ambil harga penutupan terbaru
+      const ema20 = await this.calculateEMA(20, candles);
+
       const latestCandle = candles[candles.length - 1];
       const currentPrice = Number(latestCandle.close);
-  
-      // Analisis tren berdasarkan perbandingan harga dan EMA
+
       let trend = 'NEUTRAL';
-      if (currentPrice.toFixed(3) > ema50.toFixed(3)) {
-        this.logger.log('Uptrend: Harga saat ini di atas EMA 50');
-        trend = 'UP'; // Tren naik jika harga > EMA 50
-      } else if (currentPrice.toFixed(3) < ema50.toFixed(3)) {
-        this.logger.log(`Downtrend: Harga saat ini di bawah EMA 50 ${ema50.toFixed(3)}`);
-        trend = 'DOWN'; // Tren turun jika harga < EMA 50
+      if (currentPrice > ema50) {
+        this.logger.log(`Uptrend: Harga saat ini di atas EMA50 (${ema50.toFixed(3)})`);
+        trend = 'UP';
+      } else if (currentPrice < ema50) {
+        this.logger.log(`Downtrend: Harga saat ini di bawah EMA50 (${ema50.toFixed(3)})`);
+        trend = 'DOWN';
       } else {
-        this.logger.log(`Neutral: Harga saat ini sama dengan EMA 50 ${ema50.toFixed(3)}`);
+        this.logger.log(`Neutral: Harga saat ini sama dengan EMA50 (${ema50.toFixed(3)})`);
       }
-      // await this.openSellPosition(currentPrice);
-      // Periksa apakah harga mendekati EMA (pullback)
-      await this.checkPullback(trend, ema50, currentPrice);
-  
+
+      await this.checkPullback(trend, ema50, ema20, currentPrice);
+
       return trend;
     } catch (error) {
       this.logger.error('Error saat menganalisis tren', error);
@@ -191,55 +188,43 @@ export class BotService implements OnModuleInit {
   }
   
 
-  async checkPullback(trend: string, ema50: any, currentPrice: any) {
+  async checkPullback(trend: string, ema50: any, ema20: any, currentPrice: any) {
     try {
-      // Ambang batas untuk mempertimbangkan harga "mendekati" EMA
-      const pullbackThreshold = 0.010; // Sesuaikan nilai ini sesuai strategi Anda
-    
-      // Mengonversi harga dan EMA ke angka setelah dipotong menjadi 3 desimal
+      const pullbackThreshold = 0.015; // Ambang batas untuk pullback
       const price = parseFloat(currentPrice.toFixed(3));
-      const ema = parseFloat(ema50.toFixed(3));
-  
-      // Periksa apakah harga mendekati EMA dalam ambang batas
-      const isApproachingEMA = Math.abs(price - ema) < pullbackThreshold;
-    
-      if (isApproachingEMA) {
-        this.logger.log(`Harga mendekati EMA: Harga saat ini ${price}, EMA50 ${ema}`);
-      }
-    
-      // Logika untuk mendeteksi pullback yang sudah ada
-      // if (trend === 'UP' && price <= ema && isApproachingEMA) {
-      //   this.logger.log('Uptrend: Harga kembali ke EMA, mempertimbangkan buy...');
-      //   const cekOrder = await this.cekOrderOpened(this.connection);
-      //   if (cekOrder) {
-      //     await this.openBuyPosition(price);
-      //   }
-      // } else if (trend === 'DOWN' && price >= ema && isApproachingEMA) {
-      //   this.logger.log('Downtrend: Harga kembali ke EMA, mempertimbangkan sell...');
-      //   const cekOrder = await this.cekOrderOpened(this.connection);
-      //   if (cekOrder) {
-      //     await this.openSellPosition(price);
-      //   }
-      // }
+      const ema50Value = parseFloat(ema50.toFixed(3));
+      const ema20Value = parseFloat(ema20.toFixed(3));
 
-      if (trend === 'UP'  && isApproachingEMA) {
-        this.logger.log('Uptrend: Harga kembali ke EMA, mempertimbangkan buy...');
-        const cekOrder = await this.cekOrderOpened(this.connection);
-        if (cekOrder) {
-          await this.openBuyPosition(price);
+      const isApproachingEMA = Number(Math.abs(price - ema20Value).toFixed(3)) < pullbackThreshold;
+
+      if (isApproachingEMA) {
+        this.logger.log(`Harga mendekati EMA20: Harga saat ini ${price}, EMA20 ${ema20Value}`);
+      }
+
+      // Menyaring harga mendekati EMA dengan benar
+      if (trend === 'UP' && price > ema50Value) {
+        if (isApproachingEMA) {
+          this.logger.log('Uptrend: Harga kembali ke EMA20, mempertimbangkan buy...');
+          const cekOrder = await this.cekOrderOpened(this.connection);
+          if (cekOrder) {
+            await this.openBuyPosition(price);
+          }
         }
-      } else if (trend === 'DOWN' &&  isApproachingEMA) {
-        this.logger.log('Downtrend: Harga kembali ke EMA, mempertimbangkan sell...');
-        const cekOrder = await this.cekOrderOpened(this.connection);
-        if (cekOrder) {
-          await this.openSellPosition(price);
+      } else if (trend === 'DOWN' && price < ema50Value) {
+        if (isApproachingEMA) {
+          this.logger.log('Downtrend: Harga kembali ke EMA20, mempertimbangkan sell...');
+          const cekOrder = await this.cekOrderOpened(this.connection);
+          if (cekOrder) {
+            await this.openSellPosition(price);
+          }
         }
+      } else {
+        this.logger.log('Tidak ada aksi yang diambil karena harga tidak mendekati EMA atau tren tidak sesuai.');
       }
     } catch (error) {
       this.logger.error('Error saat memeriksa pullback', error);
     }
   }
-  
 
   async openBuyPosition(currentPrice: any) {
     try {
