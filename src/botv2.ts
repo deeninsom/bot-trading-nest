@@ -5,56 +5,60 @@ import Candles from './app.entity';
 import MetaApi from 'metaapi.cloud-sdk';
 
 @Injectable()
-export class BotService implements OnModuleInit {
-  private readonly logger = new Logger(BotService.name);
-  private readonly targetTP = 0.120; // Target TP
-  private readonly stopLoss = 0.075; // Target Stop Loss
-  private volume = 0.01;
-  private pair = 'USDJPY';
-  private token = process.env.TOKEN;
+export class BotV2Service implements OnModuleInit {
   private accountId = process.env.ACC_ID;
-  private connection: any;
-
+  private readonly logger = new Logger(BotV2Service.name);
+  private api = new MetaApi(process.env.TOKEN);
+  private connection = null;
+  private account = null;
+  private pair = 'USDJPY';
+  private volume = 0.01
+  private takeProfit = 0.190;
+  private stopLoss = 0.100;
   constructor(
     @InjectRepository(Candles)
     private readonly priceRepository: Repository<Candles>,
   ) { }
 
   async onModuleInit() {
-    // Initialize MetaApi and connection only once
-    const { account, metaApi, streamConnection } = await this.initializeMetaApi();
-    this.connection = streamConnection;
+    // step 1
+    await this.initializeMetaApi();
 
-    // Fetch the last candle history once
-    await this.fetchLastCandleHistories(account);
-    // this.cekOrderOpened(streamConnection)
+    // step 2
+    await this.fetchLastCandleHistories();
+
+    // step 3
     this.analyzeTrend()
-    // Schedule the next fetch operation
-    this.scheduleNextFetch(account, streamConnection);
+
+    this.scheduleNextFetch();
   }
 
   async initializeMetaApi() {
-    const metaApi = new MetaApi(this.token);
-    const account = await metaApi.metatraderAccountApi.getAccount(this.accountId);
-    const streamConnection = account.getStreamingConnection();
-    await streamConnection.connect();
-    await streamConnection.waitSynchronized();
-    if (account.state !== 'DEPLOYED') {
-      await account.deploy();
-      this.logger.log('Account deployed.');
-    }
+    try {
+      this.account = await this.api.metatraderAccountApi.getAccount(this.accountId);
+      this.logger.log('Deploying account');
+      await this.account.deploy();
 
-    // await account.waitConnected();
-    this.logger.log('Account connected.');
-    return { account, metaApi, streamConnection };
+      this.logger.log('Waiting for API server to connect to broker (may take a couple of minutes)');
+      await this.account.waitConnected();
+
+      this.connection = this.account.getStreamingConnection();
+      this.logger.log('Waiting for SDK to synchronize to terminal state (may take some time depending on your history size)');
+      await this.connection.connect();
+      await this.connection.waitSynchronized();
+
+      this.logger.log('Connected and synchronized');
+    } catch (error) {
+      this.logger.error('Error during MetaApi connection', error);
+    }
   }
 
-  async fetchLastCandleHistories(account: any) {
+  async fetchLastCandleHistories() {
     try {
       const now = new Date();
       const currentWIBTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
       const startTime = new Date(currentWIBTime.getTime() - (60 * 60 * 1000)); // 1 hour ago
-      const candles = await account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
+      const candles = await this.account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
       await this.saveHistoryCandles(candles);
     } catch (error) {
       this.logger.error('Error fetching candle histories', error);
@@ -85,24 +89,6 @@ export class BotService implements OnModuleInit {
     }
   }
 
-  async cekOrderOpened(connection: any) {
-    const conectStatus = connection.terminalState;
-    return conectStatus.positions.length >= 3 ? false : true
-  }
-
-  // async fetchCandleFromDatabase() {
-  //   try {
-  //     return await this.priceRepository.find({
-  //       order: {
-  //         time: 'ASC'
-  //       }
-  //     })
-  //   } catch (error) {
-  //     console.log(error)
-  //   }
-  // }
-
-
   async fetchCandleFromDatabase() {
     try {
       const now = new Date();
@@ -127,31 +113,6 @@ export class BotService implements OnModuleInit {
       return [];  // Mengembalikan array kosong jika terjadi error
     }
   }
-
-  async calculateEMA(period: number, candles: any): Promise<number> {
-    try {
-      // Check if we have enough candles
-      if (candles.length < period) {
-        this.logger.warn(`Not enough data to calculate ${period}-period EMA.`);
-        return 0; // Return 0 if not enough data is available
-      }
-
-      const alpha = 2 / (period + 1);  // Smoothing factor
-      let ema = Number(candles[0].close);  // Start with the first closing price
-
-      // Apply the formula for EMA
-      for (let i = 1; i < candles.length; i++) {
-        ema = (Number(candles[i].close) * alpha) + (ema * (1 - alpha));
-      }
-
-      return ema;
-    } catch (error) {
-      this.logger.error(`Error calculating ${period}-period EMA`, error);
-      return 0;
-    }
-  }
-
-
 
   async analyzeTrend(): Promise<string> {
     try {
@@ -189,6 +150,29 @@ export class BotService implements OnModuleInit {
     } catch (error) {
       this.logger.error('Error saat menganalisis tren', error);
       return 'Error';
+    }
+  }
+
+  async calculateEMA(period: number, candles: any): Promise<number> {
+    try {
+      // Check if we have enough candles
+      if (candles.length < period) {
+        this.logger.warn(`Not enough data to calculate ${period}-period EMA.`);
+        return 0; // Return 0 if not enough data is available
+      }
+
+      const alpha = 2 / (period + 1);  // Smoothing factor
+      let ema = Number(candles[0].close);  // Start with the first closing price
+
+      // Apply the formula for EMA
+      for (let i = 1; i < candles.length; i++) {
+        ema = (Number(candles[i].close) * alpha) + (ema * (1 - alpha));
+      }
+
+      return ema;
+    } catch (error) {
+      this.logger.error(`Error calculating ${period}-period EMA`, error);
+      return 0;
     }
   }
 
@@ -233,12 +217,20 @@ export class BotService implements OnModuleInit {
     }
   }
 
+  async cekOrderOpened(connection: any) {
+    const conectStatus = connection.terminalState;
+    return conectStatus.positions.length >= 3 ? false : true
+  }
 
   async openBuyPosition(currentPrice: any) {
     try {
-      const order = await this.connection.createMarketBuyOrder(this.pair, this.volume, 151.502, 151.307);
+      const price: number = Number(currentPrice)
+      const targetTp = price + this.takeProfit
+      const targetLoss = price - this.stopLoss
+      const order = await this.connection.createMarketBuyOrder('USDJPY', this.volume, targetLoss, targetTp, {
+        comment: 'comment'
+      })
       this.logger.log('Buy position opened:', order);
-      // await this.setTPandSL(order, 'buy', currentPrice);
     } catch (error) {
       this.logger.error('Error opening buy position', error);
     }
@@ -246,45 +238,32 @@ export class BotService implements OnModuleInit {
 
   async openSellPosition(currentPrice: any) {
     try {
-      const order = await this.connection.createMarketSellOrder(this.pair, this.volume);
+      const price: number = Number(currentPrice)
+      const targetTp = price - this.takeProfit
+      const targetLoss = price + this.stopLoss
+      const order = await this.connection.createMarketSellOrder('USDJPY', this.volume, targetLoss, targetTp, {
+        comment: 'comment'
+      })
       this.logger.log('Sell position opened:', order);
-      // await this.setTPandSL(order, 'sell', currentPrice);
     } catch (error) {
       this.logger.error('Error opening sell position', error);
     }
   }
 
-  async setTPandSL(order: any, type: any, currentPrice: any) {
-    try {
-      const price: any = Number(currentPrice)
-
-      const tpPrice = type === 'sell' ? price - this.targetTP : price + this.targetTP;
-      const slPrice = type === 'sell' ? price + this.stopLoss : price - this.stopLoss;
-
-      console.log(price)
-      console.log(order.orderId, slPrice, tpPrice)
-      // Beri waktu agar riwayat order tersedia
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      await this.connection.modifyPosition(order.orderId, slPrice, tpPrice);
-      this.logger.log('Take profit and stop loss set.');
-    } catch (error) {
-      this.logger.error('Error setting TP/SL', error);
-    }
-  }
-
-
-  scheduleNextFetch(account: any, streamConnection: any) {
+  scheduleNextFetch() {
     const now = new Date();
     const nextFiveMinutes = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), Math.floor(now.getMinutes() / 5) * 5 + 5, 0, 0);
     const timeout = nextFiveMinutes.getTime() - now.getTime();
 
     setTimeout(async () => {
-      // Fetch the last candle histories periodically (every 5 minutes)
-      await this.fetchLastCandleHistories(account);
-      // this.cekOrderOpened(streamConnection)
+      // 1
+      await this.fetchLastCandleHistories();
+      
+      // 2
       this.analyzeTrend()
-      // Schedule the next fetch operation
-      this.scheduleNextFetch(account, streamConnection);
+
+      // 3
+      this.scheduleNextFetch();
     }, timeout);
   }
 }

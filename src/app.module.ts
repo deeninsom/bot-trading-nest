@@ -2,11 +2,9 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import PairUsdJpy from './app.entity';
 import * as dotenv from 'dotenv';
-import { TestNewService } from './test3';
 import { BacktestService } from './backtest-bb.service';
-import { LstmService } from './lstm';
-import { BSService } from './bs';
 import { BotService } from './bot';
+import { BotV2Service } from './botv2';
 dotenv.config();
 
 @Module({
@@ -24,6 +22,6 @@ dotenv.config();
     }),
     TypeOrmModule.forFeature([PairUsdJpy]),
   ],
-  providers: [BotService],
+  providers: [BotV2Service],
 })
 export class AppModule {}
