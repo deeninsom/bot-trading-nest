@@ -144,7 +144,9 @@ export class BotV2Service implements OnModuleInit {
         this.logger.log(`Neutral: Harga saat ini antara EMA50 (${ema50.toFixed(3)}) dan EMA200 (${ema200.toFixed(3)})`);
       }
 
-      await this.checkPullback(trend, ema50, ema20, currentPrice, ema200);
+      const subscribeMarket = await this.connection.subscribeToMarketData('USDJPY')
+      const spread = subscribeMarket.ask - subscribeMarket.bid
+      await this.checkPullback(trend, ema50, ema20, trend === 'UP' ? subscribeMarket.ask : subscribeMarket.bid, ema200, spread.toFixed(3));
 
       return trend;
     } catch (error) {
@@ -176,7 +178,7 @@ export class BotV2Service implements OnModuleInit {
     }
   }
 
-  async checkPullback(trend: string, ema50: any, ema20: any, currentPrice: any, ema200: any) {
+  async checkPullback(trend: string, ema50: any, ema20: any, currentPrice: any, ema200: any, spread: any) {
     try {
       const pullbackThreshold = 0.015; // Ambang batas untuk pullback
       const price = parseFloat(currentPrice.toFixed(3));
@@ -197,7 +199,7 @@ export class BotV2Service implements OnModuleInit {
           this.logger.log('Uptrend: Harga kembali ke EMA20, mempertimbangkan buy...');
           const cekOrder = await this.cekOrderOpened(this.connection);
           if (cekOrder) {
-            await this.openBuyPosition(price);
+            await this.openBuyPosition(price, spread);
           }
         }
       } else if (trend === 'DOWN' && price < ema50Value && price < ema200Value) {
@@ -206,7 +208,7 @@ export class BotV2Service implements OnModuleInit {
           this.logger.log('Downtrend: Harga kembali ke EMA20, mempertimbangkan sell...');
           const cekOrder = await this.cekOrderOpened(this.connection);
           if (cekOrder) {
-            await this.openSellPosition(price);
+            await this.openSellPosition(price, spread);
           }
         }
       } else {
@@ -222,11 +224,12 @@ export class BotV2Service implements OnModuleInit {
     return conectStatus.positions.length >= 3 ? false : true
   }
 
-  async openBuyPosition(currentPrice: any) {
+  async openBuyPosition(currentPrice: any, spread: any) {
     try {
       const price: number = Number(currentPrice)
-      const targetTp = price + this.takeProfit
-      const targetLoss = price - this.stopLoss
+      const targetTp = (price + this.takeProfit) + Number(spread); // TP untuk posisi Buy
+      const targetLoss = (price - this.stopLoss) - Number(spread); // SL untuk posisi Buy
+
       const order = await this.connection.createMarketBuyOrder('USDJPY', this.volume, targetLoss, targetTp, {
         comment: 'comment'
       })
@@ -236,11 +239,12 @@ export class BotV2Service implements OnModuleInit {
     }
   }
 
-  async openSellPosition(currentPrice: any) {
+  async openSellPosition(currentPrice: any, spread: any) {
     try {
       const price: number = Number(currentPrice)
-      const targetTp = price - this.takeProfit
-      const targetLoss = price + this.stopLoss
+      const targetTp = (price - this.takeProfit) - Number(spread)
+      const targetLoss = (price + this.stopLoss) + Number(spread)
+      
       const order = await this.connection.createMarketSellOrder('USDJPY', this.volume, targetLoss, targetTp, {
         comment: 'comment'
       })
