@@ -129,31 +129,34 @@ export class BotV2Service implements OnModuleInit {
         return 'Not enough data';
       }
 
-      // Menghitung EMA50, EMA200, dan EMA20
+      // Menghitung EMA50, EMA100, dan EMA200
       const ema50 = await this.calculateEMA(50, candles);
+      const ema100 = await this.calculateEMA(100, candles);
       const ema200 = await this.calculateEMA(200, candles);
-      const ema20 = await this.calculateEMA(20, candles);
 
       const latestCandle = candles[candles.length - 1];
       const currentPrice = Number(latestCandle.close);
 
       let trend = 'NEUTRAL';
 
-      // Analisis tren berdasarkan EMA50 dan EMA200
-      if (currentPrice > ema50 && currentPrice > ema200) {
-        trend = 'UP';  // Tren naik jika harga di atas EMA50 dan EMA200
-        this.logger.log(`Uptrend: Harga saat ini di atas EMA50 (${ema50.toFixed(3)}) dan EMA200 (${ema200.toFixed(3)})`);
-      } else if (currentPrice < ema50 && currentPrice < ema200) {
-        trend = 'DOWN';  // Tren turun jika harga di bawah EMA50 dan EMA200
-        this.logger.log(`Downtrend: Harga saat ini di bawah EMA50 (${ema50.toFixed(3)}) dan EMA200 (${ema200.toFixed(3)})`);
+      // Analisis tren berdasarkan aturan EMA 50, 100, dan 200
+      if (ema200 < ema100 && ema100 < ema50) {
+        trend = 'UP';  // Uptrend jika EMA200 < EMA100 < EMA50
+        this.logger.log(`Uptrend: EMA200 (${ema200.toFixed(3)}) < EMA100 (${ema100.toFixed(3)}) < EMA50 (${ema50.toFixed(3)})`);
+      } else if (ema200 > ema100 && ema100 > ema50) {
+        trend = 'DOWN';  // Downtrend jika EMA200 > EMA100 > EMA50
+        this.logger.log(`Downtrend: EMA200 (${ema200.toFixed(3)}) > EMA100 (${ema100.toFixed(3)}) > EMA50 (${ema50.toFixed(3)})`);
       } else {
-        trend = 'NEUTRAL';  // Tren netral jika harga di antara EMA50 dan EMA200
-        this.logger.log(`Neutral: Harga saat ini antara EMA50 (${ema50.toFixed(3)}) dan EMA200 (${ema200.toFixed(3)})`);
+        trend = 'NEUTRAL';  // Tren netral jika EMA50 berada di antara EMA100 dan EMA200
+        this.logger.log(`Neutral: EMA50 (${ema50.toFixed(3)}) berada di antara EMA100 (${ema100.toFixed(3)}) dan EMA200 (${ema200.toFixed(3)})`);
       }
 
-      const subscribeMarket = await this.connection.subscribeToMarketData('USDJPY')
-      const spread: any = subscribeMarket.ask - subscribeMarket.bid
-      await this.checkPullback(trend, ema50, ema20, trend === 'UP' ? subscribeMarket.ask : subscribeMarket.bid, ema200, spread.toFixed(3));
+      // Menghitung spread untuk posisi order
+      const subscribeMarket = await this.connection.subscribeToMarketData('USDJPY');
+      const spread: any = subscribeMarket.ask - subscribeMarket.bid;
+
+      // Aturan Pullback
+      await this.checkPullback(trend, ema50, ema100, currentPrice, ema200, spread.toFixed(3));
 
       return trend;
     } catch (error) {
@@ -161,6 +164,7 @@ export class BotV2Service implements OnModuleInit {
       return 'Error';
     }
   }
+
 
   async calculateEMA(period: number, candles: any): Promise<number> {
     try {
@@ -226,27 +230,68 @@ export class BotV2Service implements OnModuleInit {
   //      }
   //  }
 
-  async checkPullback(trend: string, ema50: number, ema20: number, currentPrice: number, ema200: number, spread: number) {
+  // async checkPullback(trend: string, ema50: number, ema20: number, currentPrice: number, ema200: number, spread: number) {
+  //   try {
+  //     const pullbackThreshold = 0.010; // Ambang batas untuk pullback
+  //     const price = parseFloat(currentPrice.toFixed(3));
+  //     const ema50Value = parseFloat(ema50.toFixed(3));
+  //     const ema20Value = parseFloat(ema20.toFixed(3));
+  //     const ema200Value = parseFloat(ema200.toFixed(3));
+
+  //     const isApproachingEMA50 = Math.abs(price - ema50Value) < pullbackThreshold;
+
+  //     // Tidak open order jika kondisi berisiko
+  //     if ((ema20Value < ema50Value && ema200Value < ema50Value && ema200Value < ema20Value) ||
+  //       (ema200Value > ema50Value && ema20Value > ema200Value && ema20Value < ema50Value)) {
+  //       this.logger.log('Kondisi berisiko: Tidak ada aksi yang diambil.');
+  //       return;
+  //     }
+
+  //     // Pullback pada tren naik
+  //     if (trend === 'UP' && ema200Value < ema50Value) {
+  //       if (isApproachingEMA50) {
+  //         this.logger.log('Uptrend: Harga mendekati EMA50, mempertimbangkan buy...');
+  //         const cekOrder = await this.cekOrderOpened(this.connection);
+  //         if (cekOrder) {
+  //           await this.openBuyPosition(price, spread);
+  //         }
+  //       }
+  //     }
+
+  //     // Pullback pada tren turun
+  //     if (trend === 'DOWN' && ema200Value > ema50Value) {
+  //       if (isApproachingEMA50) {
+  //         this.logger.log('Downtrend: Harga mendekati EMA50, mempertimbangkan sell...');
+  //         const cekOrder = await this.cekOrderOpened(this.connection);
+  //         if (cekOrder) {
+  //           await this.openSellPosition(price, spread);
+  //         }
+  //       }
+  //     }
+
+  //     this.logger.log('Tidak ada aksi yang diambil karena kondisi tidak sesuai.');
+  //   } catch (error) {
+  //     this.logger.error('Error saat memeriksa pullback', error);
+  //   }
+  // }
+
+  async checkPullback(trend: string, ema50: number, ema100: number, currentPrice: number, ema200: number, spread: number) {
     try {
       const pullbackThreshold = 0.010; // Ambang batas untuk pullback
       const price = parseFloat(currentPrice.toFixed(3));
       const ema50Value = parseFloat(ema50.toFixed(3));
-      const ema20Value = parseFloat(ema20.toFixed(3));
+      const ema100Value = parseFloat(ema100.toFixed(3));
       const ema200Value = parseFloat(ema200.toFixed(3));
 
-      const isApproachingEMA50 = Math.abs(price - ema50Value) < pullbackThreshold;
+      // Pullback pada Uptrend
+      if (trend === 'UP' && ema200Value < ema100Value && ema100Value < ema50Value) {
+        // Harga mendekati EMA50 atau EMA100 pada Uptrend
+        const isApproachingEMA50 = Math.abs(price - ema50Value) < pullbackThreshold;
+        const isApproachingEMA100 = Math.abs(price - ema100Value) < pullbackThreshold;
 
-      // Tidak open order jika kondisi berisiko
-      if ((ema20Value < ema50Value && ema200Value < ema50Value && ema200Value < ema20Value) ||
-        (ema200Value > ema50Value && ema20Value > ema200Value && ema20Value < ema50Value)) {
-        this.logger.log('Kondisi berisiko: Tidak ada aksi yang diambil.');
-        return;
-      }
-
-      // Pullback pada tren naik
-      if (trend === 'UP' && ema200Value < ema50Value) {
-        if (isApproachingEMA50) {
-          this.logger.log('Uptrend: Harga mendekati EMA50, mempertimbangkan buy...');
+        // Cek kondisi dan open posisi Buy
+        if (isApproachingEMA50 || isApproachingEMA100) {
+          this.logger.log('Uptrend: Harga mendekati EMA50 atau EMA100, mempertimbangkan buy...');
           const cekOrder = await this.cekOrderOpened(this.connection);
           if (cekOrder) {
             await this.openBuyPosition(price, spread);
@@ -254,10 +299,15 @@ export class BotV2Service implements OnModuleInit {
         }
       }
 
-      // Pullback pada tren turun
-      if (trend === 'DOWN' && ema200Value > ema50Value) {
-        if (isApproachingEMA50) {
-          this.logger.log('Downtrend: Harga mendekati EMA50, mempertimbangkan sell...');
+      // Pullback pada Downtrend
+      if (trend === 'DOWN' && ema200Value > ema100Value && ema100Value > ema50Value) {
+        // Harga mendekati EMA50 atau EMA100 pada Downtrend
+        const isApproachingEMA50 = Math.abs(price - ema50Value) < pullbackThreshold;
+        const isApproachingEMA100 = Math.abs(price - ema100Value) < pullbackThreshold;
+
+        // Cek kondisi dan open posisi Sell
+        if (isApproachingEMA50 || isApproachingEMA100) {
+          this.logger.log('Downtrend: Harga mendekati EMA50 atau EMA100, mempertimbangkan sell...');
           const cekOrder = await this.cekOrderOpened(this.connection);
           if (cekOrder) {
             await this.openSellPosition(price, spread);
@@ -265,7 +315,10 @@ export class BotV2Service implements OnModuleInit {
         }
       }
 
-      this.logger.log('Tidak ada aksi yang diambil karena kondisi tidak sesuai.');
+      // Tidak membuka posisi jika EMA50 berada di antara EMA100 dan EMA200
+      if ((ema50Value > ema100Value && ema50Value < ema200Value) || (ema50Value < ema100Value && ema50Value > ema200Value)) {
+        this.logger.log('Kondisi berisiko: Tidak ada aksi yang diambil.');
+      }
     } catch (error) {
       this.logger.error('Error saat memeriksa pullback', error);
     }
