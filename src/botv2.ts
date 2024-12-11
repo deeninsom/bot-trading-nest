@@ -13,8 +13,8 @@ export class BotV2Service implements OnModuleInit {
   private account = null;
   private pair = 'USDJPY';
   private volume = 0.01
-  private takeProfit = 0.190;
-  private stopLoss = 0.100;
+  private takeProfit = 0.230;
+  private stopLoss = 0.150;
   constructor(
     @InjectRepository(Candles)
     private readonly priceRepository: Repository<Candles>,
@@ -326,7 +326,7 @@ export class BotV2Service implements OnModuleInit {
 
   async cekOrderOpened(connection: any) {
     const conectStatus = connection.terminalState;
-    return conectStatus.positions.length >= 3 ? false : true
+    return conectStatus.positions.length >= 2 ? false : true
   }
 
   async openBuyPosition(currentPrice: any, spread: any) {
