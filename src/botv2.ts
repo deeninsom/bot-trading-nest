@@ -284,7 +284,7 @@ async checkPullback(trend: string, ema50: number, ema100: number, currentPrice: 
     const ema200Value = parseFloat(ema200.toFixed(3));
 
     // Tambahkan logika: Jangan lakukan apapun jika harga lebih dari 100
-    if (price > 100) {
+    if (price > ema100Value) {
       this.logger.log(`Harga ${price} melebihi 100, tidak ada aksi yang diambil.`);
       return;
     }
