@@ -5,7 +5,7 @@ import MetaApi from 'metaapi.cloud-sdk';
 @Injectable()
 export class BotV4Service implements OnModuleInit {
   private accountId = process.env.ACC_ID;
-  private readonly logger = new Logger(BotV3Service.name);
+  private readonly logger = new Logger(BotV4Service.name);
   private api = new MetaApi(process.env.TOKEN);
   private connection = null;
   private account = null;
