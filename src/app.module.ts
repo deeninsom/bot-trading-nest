@@ -5,6 +5,9 @@ import * as dotenv from 'dotenv';
 import { BacktestService } from './backtest-bb.service';
 import { BotService } from './bot';
 import { BotV2Service } from './botv2';
+import CandlesCoin from './coin.entity';
+import { BotCoinService } from './bot-crypto';
+import { BotV3Service } from './real';
 dotenv.config();
 
 @Module({
@@ -17,11 +20,12 @@ dotenv.config();
         rejectUnauthorized: false
       },
       entities: [
-        PairUsdJpy
+        PairUsdJpy,
+        CandlesCoin
       ],
     }),
-    TypeOrmModule.forFeature([PairUsdJpy]),
+    TypeOrmModule.forFeature([PairUsdJpy, ]),
   ],
-  providers: [BotV2Service],
+  providers: [BotV3Service],
 })
 export class AppModule {}

@@ -6,8 +6,9 @@ import {
   Entity
 } from 'typeorm';
 
-@Entity('candles')
-export default class Candles {
+
+@Entity('candlesCoin')
+export default class CandlesCoin {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -29,13 +30,9 @@ export default class Candles {
   @Column({ type: 'int', nullable: true })
   tickVolume: number;
 
-  // @Column({ type: 'boolean', nullable: false })
-  // isGreen: boolean;
-
   @CreateDateColumn()
   public created_at: Date;
 
   @UpdateDateColumn()
   public updated_at: Date;
 }
-

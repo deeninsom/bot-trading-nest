@@ -3,21 +3,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import Candles from './app.entity';
 import MetaApi from 'metaapi.cloud-sdk';
+import CandlesCoin from './coin.entity';
 
 @Injectable()
-export class BotV2Service implements OnModuleInit {
+export class BotCoinService implements OnModuleInit {
   private accountId = process.env.ACC_ID;
-  private readonly logger = new Logger(BotV2Service.name);
+  private readonly logger = new Logger(BotCoinService.name);
   private api = new MetaApi(process.env.TOKEN);
   private connection = null;
   private account = null;
-  private pair = 'USDJPY';
+  private pair = 'LTCUSD';
   private volume = 0.01
   private takeProfit = 0.190;
   private stopLoss = 0.090;
   constructor(
     @InjectRepository(Candles)
-    private readonly priceRepository: Repository<Candles>,
+    private readonly priceRepository: Repository<CandlesCoin>,
   ) { }
 
   async onModuleInit() {
@@ -25,12 +26,12 @@ export class BotV2Service implements OnModuleInit {
     await this.initializeMetaApi();
 
     // // step 2
-    // await this.fetchLastCandleHistories();
+    await this.fetchLastCandleHistories();
 
     // // step 3
     // this.analyzeTrend()
 
-    // this.scheduleNextFetch();
+    this.scheduleNextFetch();
   }
 
   async initializeMetaApi() {
@@ -57,14 +58,14 @@ export class BotV2Service implements OnModuleInit {
     try {
       const now = new Date();
       const currentWIBTime = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      const startTime = new Date(currentWIBTime.getTime() - (60 * 60 * 1000)); // 1 hour ago
-      const candles = await this.account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
-      await this.saveHistoryCandles(candles);
+      // const startTime = new Date(currentWIBTime.getTime() - (60 * 60 * 1000)); // 1 hour ago
+      // const candles = await this.account.getHistoricalCandles(this.pair, '5m', startTime, 0, 1);
+      // await this.saveHistoryCandles(candles);
 
-      // const startOctober = new Date(currentWIBTime.getFullYear(), 12, 11); // Bulan Oktober
-      // const endOctober = new Date(currentWIBTime.getFullYear(), 12, 12) // 1 November
-      // const candlesOctober = await this.account.getHistoricalCandles(this.pair, '5m', startOctober, endOctober.getTime(), 0);
-      // this.saveHistoryCandles(candlesOctober)
+      const startOctober = new Date(currentWIBTime.getFullYear(), 12, 1); // Bulan Oktober
+      const endOctober = new Date(currentWIBTime.getFullYear(), 12, 12) // 1 November
+      const candlesOctober = await this.account.getHistoricalCandles(this.pair, '15m', startOctober, endOctober.getTime(), 0);
+      this.saveHistoryCandles(candlesOctober)
     } catch (error) {
       this.logger.error('Error fetching candle histories', error);
     }
