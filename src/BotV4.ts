@@ -79,7 +79,7 @@ export class BotV4Service implements OnModuleInit {
       }
 
       // Menyimpan harga saat ini untuk digunakan pada perbandingan berikutnya
-      this.lastPrice = price;
+      this.lastPrice = price.toFixed(3);
 
       // Konfirmasi tren dengan ATR dan multi-timeframe
       const atr = await this.getATR(14); // ATR periode 14
@@ -206,8 +206,8 @@ export class BotV4Service implements OnModuleInit {
   async detectBOS(currentPrice: number): Promise<boolean> {
     try {
       const history = await this.account.getHistoricalCandles(this.pair, '1m', 10);
-      const recentHigh = Math.max(...history.map(candle => Number(candle.high)));
-      const recentLow = Math.min(...history.map(candle => Number(candle.low)));
+      const recentHigh = Math.max(...history.map(candle => Number(candle.high).toFixed(3)));
+      const recentLow = Math.min(...history.map(candle => Number(candle.low).toFixed(3)));
       return currentPrice > recentHigh || currentPrice < recentLow;
     } catch (error) {
       this.logger.error('Error detecting BOS', error);
@@ -220,11 +220,11 @@ export class BotV4Service implements OnModuleInit {
       const history = await this.account.getHistoricalCandles(this.pair, '1m', period);
       const tr = history.map((candle, i) => {
         if (i === 0) return 0; // Lewatkan candle pertama
-        const prevClose = Number(history[i - 1]?.close);
+        const prevClose = Number(history[i - 1]?.close).toFixed(3);
         return Math.max(
-          Number(candle?.high) - Number(candle?.low),
-          Math.abs(Number(candle?.high) - prevClose),
-          Math.abs(Number(candle?.low) - prevClose)
+          Number(candle?.high) - Number(candle?.low).toFixed(3),
+          Math.abs(Number(candle?.high).toFixed(3) - prevClose),
+          Math.abs(Number(candle?.low).toFixed(3) - prevClose)
         );
       });
       const atr = tr.reduce((sum, range) => sum + range, 0) / period;
@@ -237,7 +237,7 @@ export class BotV4Service implements OnModuleInit {
 
   async getTrendOnTimeframe(timeframe: string): Promise<string> {
     const history = await this.account.getHistoricalCandles(this.pair, timeframe, 5);
-    const recentClose = history.map(candle => Number(candle.close));
+    const recentClose = history.map(candle => Number(candle.close).toFixed(3));
     return recentClose[4] > recentClose[0] ? 'UP' : 'DOWN';
   }
 
