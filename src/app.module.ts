@@ -8,6 +8,7 @@ import { BotV2Service } from './botv2';
 import CandlesCoin from './coin.entity';
 import { BotCoinService } from './bot-crypto';
 import { BotV3Service } from './real';
+import { BotV4Service } from './BotV4';
 dotenv.config();
 
 @Module({
@@ -26,6 +27,6 @@ dotenv.config();
     }),
     TypeOrmModule.forFeature([PairUsdJpy, ]),
   ],
-  providers: [BotV3Service],
+  providers: [BotV4Service],
 })
 export class AppModule {}
