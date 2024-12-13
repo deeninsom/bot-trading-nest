@@ -206,8 +206,8 @@ export class BotV4Service implements OnModuleInit {
   async detectBOS(currentPrice: number): Promise<boolean> {
     try {
       const history = await this.account.getHistoricalCandles(this.pair, '1m', 10);
-      const recentHigh = Math.max(...history.map(candle => candle.high));
-      const recentLow = Math.min(...history.map(candle => candle.low));
+      const recentHigh = Math.max(...history.map(candle => Number(candle.high)));
+      const recentLow = Math.min(...history.map(candle => Number(candle.low)));
       return currentPrice > recentHigh || currentPrice < recentLow;
     } catch (error) {
       this.logger.error('Error detecting BOS', error);
@@ -220,11 +220,11 @@ export class BotV4Service implements OnModuleInit {
       const history = await this.account.getHistoricalCandles(this.pair, '1m', period);
       const tr = history.map((candle, i) => {
         if (i === 0) return 0; // Lewatkan candle pertama
-        const prevClose = history[i - 1].close;
+        const prevClose = Number(history[i - 1]?.close);
         return Math.max(
-          candle.high - candle.low,
-          Math.abs(candle.high - prevClose),
-          Math.abs(candle.low - prevClose)
+          Number(candle?.high) - Number(candle?.low),
+          Math.abs(Number(candle?.high) - prevClose),
+          Math.abs(Number(candle?.low) - prevClose)
         );
       });
       const atr = tr.reduce((sum, range) => sum + range, 0) / period;
@@ -237,7 +237,7 @@ export class BotV4Service implements OnModuleInit {
 
   async getTrendOnTimeframe(timeframe: string): Promise<string> {
     const history = await this.account.getHistoricalCandles(this.pair, timeframe, 5);
-    const recentClose = history.map(candle => candle.close);
+    const recentClose = history.map(candle => Numbet(candle.close));
     return recentClose[4] > recentClose[0] ? 'UP' : 'DOWN';
   }
 
