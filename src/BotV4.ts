@@ -217,23 +217,33 @@ export class BotV4Service implements OnModuleInit {
 
   async getATR(period: any): Promise<any> {
     try {
-      const history = await this.account.getHistoricalCandles(this.pair, '1m', period);
-      const tr = history.map((candle, i) => {
-        if (i === 0) return 0; // Lewatkan candle pertama
-        const prevClose = Number(history[i - 1]?.close).toFixed(3);
-        return Math.max(
-          Number(candle?.high) - Number(candle?.low).toFixed(3),
-          Math.abs(Number(candle?.high).toFixed(3) - prevClose),
-          Math.abs(Number(candle?.low).toFixed(3) - prevClose)
-        );
-      });
-      const atr = tr.reduce((sum, range) => sum + range, 0) / period;
+  const history = await this.account.getHistoricalCandles(this.pair, '1m', period);
 
-      console.log(atr)
-      return atr;
-    } catch (error) {
-      this.logger.error('Error calculating ATR', error);
-      return null;
+  if (!history || history.length < period) {
+    this.logger.error(`Insufficient data to calculate ATR. Expected ${period}, but got ${history?.length || 0}`);
+    return null;
+  }
+
+  const tr = history.map((candle, i) => {
+    if (i === 0) return 0; // Lewatkan candle pertama
+    const prevClose = Number(Number(history[i - 1]?.close).toFixed(3));
+    const high = Number(Number(candle?.high).toFixed(3));
+    const low = Number(Number(candle?.low).toFixed(3));
+
+    return Math.max(
+      high - low,
+      Math.abs(high - prevClose),
+      Math.abs(low - prevClose)
+    );
+  });
+
+  const atr = tr.reduce((sum, range) => sum + range, 0) / period;
+
+  console.log(atr);
+  return atr;
+} catch (error) {
+  this.logger.error('Error calculating ATR', error);
+  return null;
     }
   }
 
