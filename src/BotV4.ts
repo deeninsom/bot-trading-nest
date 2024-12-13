@@ -82,12 +82,12 @@ export class BotV4Service implements OnModuleInit {
       this.lastPrice = price.toFixed(3);
 
       // Konfirmasi tren dengan ATR dan multi-timeframe
-      const atr = await this.getATR(14); // ATR periode 14
+      //const atr = await this.getATR(14); // ATR periode 14
       const trend1m = await this.getTrendOnTimeframe('1m');
       const trend5m = await this.getTrendOnTimeframe('5m');
       const isBOS = await this.detectBOS(price);
 
-      if (atr < 0.001) {
+      //if (atr < 0.001) {
         this.logger.log('Volatility is too low, skipping entry');
         return;
       }
@@ -215,37 +215,36 @@ export class BotV4Service implements OnModuleInit {
     }
   }
 
-  async getATR(period: any): Promise<any> {
-    try {
-  const history = await this.account.getHistoricalCandles(this.pair, '1m', period);
+  //async getATR(period: any): Promise<any> {
+  //  try {
+//  const history = await this.account.getHistoricalCandles(this.pair, '1m', period);
 
-  if (!history || history.length < period) {
-    this.logger.error(`Insufficient data to calculate ATR. Expected ${period}, but got ${history?.length || 0}`);
-    return null;
-  }
+//  if (!history || history.length < period) {
+ //   this.logger.error(`Insufficient data to calculate ATR. Expected ${period}, but got ${history?.length || 0}`);
+ //   return null;
+//  }
 
-  const tr = history.map((candle, i) => {
-    if (i === 0) return 0; // Lewatkan candle pertama
-    const prevClose = Number(Number(history[i - 1]?.close).toFixed(3));
-    const high = Number(Number(candle?.high).toFixed(3));
-    const low = Number(Number(candle?.low).toFixed(3));
+//  const tr = history.map((candle, i) => {
+//    if (i === 0) return 0; // Lewatkan candle pertama
+//    const prevClose = Number(Number(history[i - 1]?.close).toFixed(3));
+//    const high = Number(Number(candle?.high).toFixed(3));
+//    const low = Number(Number(candle?.low).toFixed(3));
 
-    return Math.max(
-      high - low,
-      Math.abs(high - prevClose),
-      Math.abs(low - prevClose)
-    );
-  });
+//    return Math.max(
+//      high - low,
+//      Math.abs(high - prevClose),
+//      Math.abs(low - prevClose)
+//    )  });
 
-  const atr = tr.reduce((sum, range) => sum + range, 0) / period;
+ // const atr = tr.reduce((sum, range) => sum + range, 0) / period;
 
-  console.log(atr);
-  return atr;
-} catch (error) {
-  this.logger.error('Error calculating ATR', error);
-  return null;
-    }
-  }
+//  console.log(atr);
+//  return atr;
+//} catch (error) {
+//  this.logger.error('Error calculating ATR', error);
+//  return null;
+//    }
+//  }
 
   async getTrendOnTimeframe(timeframe: string): Promise<string> {
     const history = await this.account.getHistoricalCandles(this.pair, timeframe, 5);
