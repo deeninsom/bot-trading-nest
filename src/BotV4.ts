@@ -67,8 +67,8 @@ export class BotV4Service implements OnModuleInit {
 
       this.lastPrice = Number(price.toFixed(3));
 
-      const trend1m = await this.getTrendOnTimeframe('1m');
-      const trend5m = await this.getTrendOnTimeframe('5m');
+      const trend1m = await this.getTrendOnTimeframe('5m');
+      const trend5m = await this.getTrendOnTimeframe('15m');
       const isBOS = await this.detectBOS(price);
 
       if (!(trend1m === trend5m && isBOS)) {
@@ -178,7 +178,7 @@ export class BotV4Service implements OnModuleInit {
 
   private async detectBOS(currentPrice: number): Promise<boolean> {
     try {
-      const history = await this.account.getHistoricalCandles(this.pair, '1m', 10);
+      const history = await this.account.getHistoricalCandles(this.pair, '5m', 10);
       const recentHigh = Math.max(...history.map(candle => Number(candle.high)));
       const recentLow = Math.min(...history.map(candle => Number(candle.low)));
       return currentPrice > recentHigh || currentPrice < recentLow;
