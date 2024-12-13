@@ -237,7 +237,7 @@ export class BotV4Service implements OnModuleInit {
 
   async getTrendOnTimeframe(timeframe: string): Promise<string> {
     const history = await this.account.getHistoricalCandles(this.pair, timeframe, 5);
-    const recentClose = history.map(candle => Numbet(candle.close));
+    const recentClose = history.map(candle => Number(candle.close));
     return recentClose[4] > recentClose[0] ? 'UP' : 'DOWN';
   }
 
