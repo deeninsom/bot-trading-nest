@@ -215,7 +215,7 @@ export class BotV4Service implements OnModuleInit {
     }
   }
 
-  async getATR(period: number): Promise<number> {
+  async getATR(period: any): Promise<any> {
     try {
       const history = await this.account.getHistoricalCandles(this.pair, '1m', period);
       const tr = history.map((candle, i) => {
@@ -228,6 +228,8 @@ export class BotV4Service implements OnModuleInit {
         );
       });
       const atr = tr.reduce((sum, range) => sum + range, 0) / period;
+
+      console.log(atr)
       return atr;
     } catch (error) {
       this.logger.error('Error calculating ATR', error);
