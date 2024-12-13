@@ -79,8 +79,10 @@ export class BotV3Service implements OnModuleInit {
       // Menyimpan harga saat ini untuk digunakan pada perbandingan berikutnya
       this.lastPrice = price;
 
-      // Mengecek apakah waktu sekarang adalah kelipatan dari 5 menit
+      // Mendapatkan menit lokal
       const currentMinute = new Date().getMinutes();
+
+      // Menentukan apakah saat ini kelipatan dari 5 menit
       if (currentMinute % 5 === 0) {
         // Mengecek apakah ada kurang dari 2 order terbuka sebelum membuka posisi
         const canOpenOrder = await this.cekOrderOpened(this.connection);
@@ -90,6 +92,8 @@ export class BotV3Service implements OnModuleInit {
         } else {
           this.logger.log('There are already 2 orders open. Not opening new position.');
         }
+      } else {
+        this.logger.log(`Current time is ${currentMinute} minutes, no action taken (waiting for 5-minute mark).`);
       }
 
     } catch (error) {
