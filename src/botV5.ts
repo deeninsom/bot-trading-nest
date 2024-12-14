@@ -1,14 +1,14 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+.import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import MetaApi from 'metaapi.cloud-sdk';
 
 @Injectable()
 export class BotV5Service implements OnModuleInit {
   private accountId = process.env.ACC_ID;
-  private readonly logger = new Logger(BotV4Service.name);
+  private readonly logger = new Logger(BotV5Service.name);
   private api = new MetaApi(process.env.TOKEN);
   private connection = null;
   private account = null;
-  private pair = 'USDJPY';
+  private pair = 'LTCUSD';
   private volume = 0.01;
   private takeProfit = 0.190;
   private stopLoss = 0.090;
@@ -204,6 +204,16 @@ export class BotV5Service implements OnModuleInit {
       this.logger.error('Error fetching trend on timeframe', error);
       return 'NEUTRAL';
     }
+  }
+
+  private async canEnterNewPosition(): Promise<boolean> {
+    const now = Date.now();
+    if (this.lastEntryTime && now - this.lastEntryTime < 5 * 60 * 1000) {
+      this.logger.log('Skipping entry, last entry was less than 5 minutes ago');
+      return false;
+    }
+    this.lastEntryTime = now;
+    return true;
   }
 
   private scheduleNextFetch() {
