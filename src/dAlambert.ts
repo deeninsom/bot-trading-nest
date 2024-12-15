@@ -11,11 +11,10 @@ export class BotV6Service implements OnModuleInit {
   private pair = 'LTCJPY';
   private baseVolume = 0.01; // Volume dasar
   private volume = this.baseVolume;
-  private takeProfit = 1.190;
-  private stopLoss = 0.500;
 
   private lastAction: 'BUY' | 'SELL' | null = null; // Menyimpan tindakan terakhir
   private lastEntryTime: number | null = null;
+  private highestProfit: number = 0; // Menyimpan profit tertinggi
 
   async onModuleInit() {
     await this.initializeMetaApi();
@@ -32,11 +31,9 @@ export class BotV6Service implements OnModuleInit {
       await this.account.waitConnected();
 
       this.connection = this.account.getStreamingConnection();
-      this.logger.log('Waiting for SDK to synchronize to terminal state');
+      this.logger.log('Connected and synchronized');
       await this.connection.connect();
       await this.connection.waitSynchronized();
-
-      this.logger.log('Connected and synchronized');
     } catch (error) {
       this.logger.error('Error during MetaApi connection', error);
     }
@@ -45,7 +42,7 @@ export class BotV6Service implements OnModuleInit {
   private async fetchRealTimePrice() {
     try {
       const marketData = await this.connection.subscribeToMarketData(this.pair);
-      return marketData.ask; // Mengembalikan harga ask
+      return marketData.ask;
     } catch (error) {
       this.logger.error('Error fetching real-time price', error);
       return null;
@@ -55,111 +52,102 @@ export class BotV6Service implements OnModuleInit {
   private async analyzeTrend() {
     try {
       const price = await this.fetchRealTimePrice();
-      if (price === null) {
-        this.logger.warn('No price data available');
-        return;
-      }
+      if (!price) return;
 
-      const currentMinute = new Date().getMinutes();
-      if (currentMinute % 5 === 0) {
-        const canOpenOrder = await this.cekOrderOpened(this.connection);
-        if (canOpenOrder && (await this.canEnterNewPosition())) {
-          await this.openPositionWithDAlembert(price);
-        } else {
-          this.logger.log('Conditions not met for new position. Skipping entry.');
-        }
+      const canOpenOrder = await this.cekOrderOpened(this.connection);
+
+      // Jika tidak ada order terbuka, buka posisi baru
+      if (canOpenOrder && (await this.canEnterNewPosition())) {
+        await this.openPosition(price);
       } else {
-        this.logger.log(`Current minute: ${currentMinute}. Waiting for 5-minute mark.`);
+        await this.manageOpenOrders();
       }
     } catch (error) {
       this.logger.error('Error analyzing trend', error);
     }
   }
 
-  private async openPositionWithDAlembert(currentPrice: number) {
+  private async openPosition(currentPrice: number) {
     try {
+      const nextAction = this.lastAction === 'BUY' ? 'SELL' : 'BUY';
       const spread = await this.getSpread();
 
-      // Tentukan tindakan berikutnya berdasarkan pola D’Alembert
-      const nextAction = this.lastAction === 'BUY' ? 'SELL' : 'BUY';
-
       if (nextAction === 'BUY') {
-        await this.openBuyPosition(currentPrice, spread);
+        await this.openBuyPosition();
       } else {
-        await this.openSellPosition(currentPrice, spread);
+        await this.openSellPosition();
       }
 
-      this.lastAction = nextAction; // Perbarui tindakan terakhir
+      this.lastAction = nextAction;
+      this.highestProfit = 0; // Reset profit tertinggi saat posisi baru dibuka
     } catch (error) {
-      this.logger.error('Error opening position with D’Alembert', error);
+      this.logger.error('Error opening position', error);
     }
   }
 
-  private async openBuyPosition(currentPrice: number, spread: number) {
+  private async openBuyPosition() {
+    const order = await this.connection.createMarketBuyOrder(
+      this.pair,
+      this.volume
+    );
+    this.logger.log('Buy position opened:', order);
+  }
+
+  private async openSellPosition() {
+    const order = await this.connection.createMarketSellOrder(
+      this.pair,
+      this.volume
+    );
+    this.logger.log('Sell position opened:', order);
+  }
+
+  private async manageOpenOrders() {
     try {
-      const price = Number(currentPrice);
-      const targetTp = price + this.takeProfit + spread;
-      const targetLoss = price - this.stopLoss - spread;
+      const openPositions = this.connection.terminalState.positions;
+      let totalProfit = 0;
 
-      const order = await this.connection.createMarketBuyOrder(
-        this.pair,
-        this.volume,
-        targetLoss,
-        targetTp,
-        { comment: 'Buy based on D’Alembert' }
-      );
-      this.logger.log('Buy position opened:', order);
+      for (const position of openPositions) {
+        totalProfit += position.profit;
 
-      // Kurangi volume setelah menang
-      this.volume = Math.max(this.baseVolume, this.volume - this.baseVolume);
+        // Simpan profit tertinggi
+        if (position.profit > this.highestProfit) {
+          this.highestProfit = position.profit;
+        }
+
+        // Jika profit menurun hingga setengah dari puncak, tutup posisi
+        if (position.profit <= this.highestProfit / 2) {
+          await this.closePosition(position);
+          this.logger.log(
+            `Position closed due to profit drop. Highest: ${this.highestProfit}, Current: ${position.profit}`
+          );
+        }
+      }
+
+      // Tutup semua posisi jika total profit mencapai atau melebihi $1
+      if (totalProfit >= 1) {
+        for (const position of openPositions) {
+          await this.closePosition(position.positionId);
+        }
+        this.logger.log(`All positions closed. Total profit: ${totalProfit}`);
+      }
     } catch (error) {
-      this.logger.error('Error opening buy position', error);
-
-      // Tambahkan volume setelah kalah
-      this.volume += this.baseVolume;
+      this.logger.error('Error managing open orders', error);
     }
   }
 
-  private async openSellPosition(currentPrice: number, spread: number) {
+  private async closePosition(position: any) {
     try {
-      const price = Number(currentPrice);
-      const targetTp = price - this.takeProfit - spread;
-      const targetLoss = price + this.stopLoss + spread;
-
-      const order = await this.connection.createMarketSellOrder(
-        this.pair,
-        this.volume,
-        targetLoss,
-        targetTp,
-        { comment: 'Sell based on D’Alembert' }
-      );
-      this.logger.log('Sell position opened:', order);
-
-      // Kurangi volume setelah menang
-      this.volume = Math.max(this.baseVolume, this.volume - this.baseVolume);
+      await this.connection.closePosition(position.id);
+      this.logger.log(`Position ${position.id} closed`);
     } catch (error) {
-      this.logger.error('Error opening sell position', error);
-
-      // Tambahkan volume setelah kalah
-      this.volume += this.baseVolume;
+      this.logger.error(`Error closing position ${position.id}`, error);
     }
   }
 
-  private async getSpread(): Promise<number> {
+  private async cekOrderOpened(connection: any): Promise<boolean> {
     try {
-      const marketData = await this.connection.subscribeToMarketData(this.pair);
-      return marketData.ask - marketData.bid;
-    } catch (error) {
-      this.logger.error('Error fetching market spread', error);
-      return 0;
-    }
-  }
-
-  private async cekOrderOpened(connection: any) {
-    try {
-      const terminalState = connection.terminalState;
-      const openPositions = terminalState.positions;
-      return openPositions.length < 2;
+      const openPositions = connection.terminalState.positions;
+      return openPositions.length === 0;
     } catch (error) {
       this.logger.error('Error checking open orders', error);
       return false;
@@ -174,6 +162,16 @@ export class BotV6Service implements OnModuleInit {
     }
     this.lastEntryTime = now;
     return true;
+  }
+
+  private async getSpread(): Promise<number> {
+    try {
+      const marketData = await this.connection.subscribeToMarketData(this.pair);
+      return marketData.ask - marketData.bid;
+    } catch (error) {
+      this.logger.error('Error fetching market spread', error);
+      return 0;
+    }
   }
 
   private scheduleNextFetch() {
