@@ -1,4 +1,4 @@
-.import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import MetaApi from 'metaapi.cloud-sdk';
 
 @Injectable()
