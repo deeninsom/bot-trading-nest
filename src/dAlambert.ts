@@ -9,15 +9,10 @@ export class BotV6Service implements OnModuleInit {
   private connection = null;
   private account = null;
   private pair = 'USDJPY';
-  private baseVolume = 0.01; // Volume dasar
-  private volume = this.baseVolume; // Volume yang akan digunakan dalam trading
-
-  private lastAction: 'BUY' | 'SELL' | null = null; // Menyimpan tindakan terakhir
+  private baseVolume = 0.01; // Base volume
+  private volume = this.baseVolume; // Current volume used for trading
   private lastEntryTime: number | null = null;
-  private highestProfit: number = 0; // Menyimpan profit tertinggi
-  private lastTradeProfit: number = 0; // Menyimpan profit transaksi terakhir
-  private lastIdOrder: number = 0;
-  private lastOrderResult: 'WIN' | 'LOSE' | null = null; // Hasil dari order terakhir
+  private lastTradeResult: string = 'NONE'; // Track WIN or LOSE for Martingale strategy
 
   async onModuleInit() {
     await this.initializeMetaApi();
@@ -26,17 +21,16 @@ export class BotV6Service implements OnModuleInit {
 
   private async initializeMetaApi() {
     try {
+      // Get account and initialize connection
       this.account = await this.api.metatraderAccountApi.getAccount(this.accountId);
       this.logger.log('Deploying account');
       await this.account.deploy();
-
-      this.logger.log('Waiting for API server to connect to broker');
       await this.account.waitConnected();
 
       this.connection = this.account.getStreamingConnection();
-      this.logger.log('Connected and synchronized');
       await this.connection.connect();
       await this.connection.waitSynchronized();
+      this.logger.log('MetaApi connection established');
     } catch (error) {
       this.logger.error('Error during MetaApi connection', error);
     }
@@ -45,7 +39,10 @@ export class BotV6Service implements OnModuleInit {
   private async fetchRealTimePrice() {
     try {
       const marketData = await this.connection.subscribeToMarketData(this.pair);
-      return marketData.ask;
+      if (marketData && marketData.ask) {
+        return marketData.ask; // Return the ask price
+      }
+      return null;
     } catch (error) {
       this.logger.error('Error fetching real-time price', error);
       return null;
@@ -54,9 +51,9 @@ export class BotV6Service implements OnModuleInit {
 
   private async getLastTwoCandles() {
     try {
-      const candles = await this.account.getHistoricalCandles(this.pair, '5m');
-      if (candles.length >= 2) {
-        return candles.slice(-2); // Ambil 2 candle terakhir
+      const candles = await this.account.getHistoricalCandles(this.pair, '15m');
+      if (candles.length >= 4) {
+        return candles.slice(-4); // Get the last two candles
       }
       return null;
     } catch (error) {
@@ -71,46 +68,44 @@ export class BotV6Service implements OnModuleInit {
       if (!price) return;
 
       const lastTwoCandles = await this.getLastTwoCandles();
-      if (lastTwoCandles && lastTwoCandles.length === 2) {
-        const [previousCandle, currentCandle] = lastTwoCandles;
+      if (!lastTwoCandles || lastTwoCandles.length !== 4) {
+        this.logger.log('Insufficient candle data');
+        return;
+      }
 
-        const canOpenOrder = await this.cekOrderOpened(this.connection);
+      const [previousCandle, currentCandle] = lastTwoCandles;
 
-        // Hanya buka posisi jika tidak ada posisi terbuka dan bisa melakukan entry baru
-        if (canOpenOrder && await this.canEnterNewPosition()) {
-          const trendIsUp = await this.isUptrend();
-          const trendIsDown = await this.isDowntrend();
+      const trendIsUp = currentCandle.close > previousCandle.close;
+      const trendIsDown = currentCandle.close < previousCandle.close;
 
+      if (await this.cekOrderOpened()) {
+        const canEnterPosition = await this.canEnterNewPosition();
+        if (canEnterPosition) {
           if (trendIsUp) {
-            await this.openPosition(price); // Jika tren naik, buka posisi BUY
+            await this.openPosition(price, 'BUY');
+            this.logger.log('Opening BUY position due to uptrend');
           } else if (trendIsDown) {
-            await this.openPosition(price); // Jika tren turun, buka posisi SELL
+            await this.openPosition(price, 'SELL');
+            this.logger.log('Opening SELL position due to downtrend');
           } else {
-            this.logger.log('No clear trend based on last two candles');
+            this.logger.log('No clear trend detected');
           }
         } else {
-          await this.manageOpenOrders();
+          this.logger.log('Waiting for the next entry opportunity');
         }
       }
     } catch (error) {
-      this.logger.error('Error analyzing trend', error);
+      this.logger.error('Error analyzing trend:', error);
     }
   }
 
-  private async openPosition(currentPrice: number) {
+  private async openPosition(currentPrice: number, position: string) {
     try {
-      const trendIsUp = await this.isUptrend();
-      const trendIsDown = await this.isDowntrend();
-
-      if (trendIsUp) {
+      if (position === 'BUY') {
         await this.openBuyPosition();
-      } else if (trendIsDown ) {
+      } else if (position === 'SELL') {
         await this.openSellPosition();
-      } else {
-        this.logger.log('No clear trend to open new position');
       }
-
-      this.highestProfit = 0; // Reset profit tertinggi saat posisi baru dibuka
     } catch (error) {
       this.logger.error('Error opening position', error);
     }
@@ -119,7 +114,6 @@ export class BotV6Service implements OnModuleInit {
   private async openBuyPosition() {
     try {
       const order = await this.connection.createMarketBuyOrder(this.pair, this.volume);
-      this.lastIdOrder = order.positionId;
       this.logger.log('Buy position opened:', order);
     } catch (error) {
       this.logger.error('Error opening buy position', error);
@@ -129,63 +123,16 @@ export class BotV6Service implements OnModuleInit {
   private async openSellPosition() {
     try {
       const order = await this.connection.createMarketSellOrder(this.pair, this.volume);
-      this.lastIdOrder = order.positionId;
       this.logger.log('Sell position opened:', order);
     } catch (error) {
       this.logger.error('Error opening sell position', error);
     }
   }
 
-  private async manageOpenOrders() {
+  private async cekOrderOpened(): Promise<boolean> {
     try {
       const openPositions = this.connection.terminalState.positions;
-      let totalProfit = 0;
-
-      for (const position of openPositions) {
-        totalProfit += position.unrealizedProfit;
-
-        // Simpan profit tertinggi
-        if (position.unrealizedProfit > this.highestProfit) {
-          this.highestProfit = position.unrealizedProfit;
-        }
-
-        // Tutup posisi jika profit mencapai limit kerugian
-        if (position.unrealizedProfit <= -1.00) {
-          await this.closePosition(position);
-          this.logger.log(`Position closed due to loss. Highest: ${this.highestProfit}, Current: ${position.unrealizedProfit}`);
-        }
-      }
-
-      // Tutup semua posisi jika total profit mencapai atau melebihi $1
-      if (totalProfit >= 1.00) {
-        for (const position of openPositions) {
-          await this.closePosition(position);
-        }
-        this.logger.log(`All positions closed. Total profit: ${totalProfit}`);
-      }
-    } catch (error) {
-      this.logger.error('Error managing open orders', error);
-    }
-  }
-
-  private async closePosition(position: any) {
-    try {
-      await this.connection.closePosition(position.id);
-      if (position.unrealizedProfit <= -1.00) {
-        this.volume = this.volume * 2
-      }else{
-        this.volume = this.baseVolume
-      }
-      this.logger.log(`Position ${position.id} closed`);
-    } catch (error) {
-      this.logger.error(`Error closing position ${position.id}`, error);
-    }
-  }
-
-  private async cekOrderOpened(connection: any): Promise<boolean> {
-    try {
-      const openPositions = this.connection.terminalState.positions;
-      return openPositions.length === 0;
+      return openPositions.length <= 0; // Can only open new position if none are open
     } catch (error) {
       this.logger.error('Error checking open orders', error);
       return false;
@@ -202,43 +149,30 @@ export class BotV6Service implements OnModuleInit {
     return true;
   }
 
-  private async isUptrend(): Promise<boolean> {
-    const lastTwoCandles = await this.getLastTwoCandles();
-    if (!lastTwoCandles || lastTwoCandles.length < 2) {
-      return false;
+  private async realTimeCheckOrderOpened() {
+    const openPositions = this.connection.terminalState.positions;
+    for (const position of openPositions) {
+      const profit = position.unrealizedProfit;
+      console.log({
+        id_order: position.id,
+        profit: profit
+      })
+      if (profit.toFixed(1) < -1.1) {
+        await this.connection.closePosition(position.id);
+        this.logger.log(`Closed position ${position.id} with profit: ${profit}`);
+        console.log('MOHON MAAF ANDA KALAH')
+      }else if(profit.toFixed(1) > 2.1){
+        await this.connection.closePosition(position.id);
+        this.logger.log(`Closed position ${position.id} with profit: ${profit}`);
+        console.log('SELAMAT ANDA MENANG')
+      }
     }
-
-    const [previousCandle, currentCandle] = lastTwoCandles;
-    return currentCandle.close > previousCandle.close;
   }
-
-  private async isDowntrend(): Promise<boolean> {
-    const lastTwoCandles = await this.getLastTwoCandles();
-    if (!lastTwoCandles || lastTwoCandles.length < 2) {
-      return false;
-    }
-
-    const [previousCandle, currentCandle] = lastTwoCandles;
-    return currentCandle.close < previousCandle.close;
-  }
-
-  // private async updateVolumeBasedOnLastOrder() {
-  //   const history = await this.connection.historyStorage
-  //   const state =await this.connection.terminalState
-  //   const lastOrder = history.deals
-  //   .filter((f) => f.symbol === sys)
-  //   if (this.lastOrderResult === 'LOSE') {
-  //     this.volume = this.volume * 2; // Gandakan volume jika kalah
-  //     this.logger.log(`Volume updated to: ${this.volume}`);
-  //   } else if (this.lastOrderResult === 'WIN') {
-  //     this.volume = this.baseVolume; // Kembalikan volume ke volume dasar jika menang
-  //     this.logger.log(`Volume reset to base volume: ${this.volume}`);
-  //   }
-  // }
 
   private scheduleNextFetch() {
     setInterval(async () => {
       await this.analyzeTrend();
-    }, 3000); // Eksekusi setiap 3 detik
+      await this.realTimeCheckOrderOpened()
+    }, 3000); // Execute every 3 seconds
   }
 }
