@@ -124,12 +124,12 @@ export class BotV6Service implements OnModuleInit {
 
       const takeProfit = this.baseProfit * (this.volume / this.baseVolume);
      
-      if (Number(profit.toFixed(1) <= -this.baseLoss) {
+      if (Number(profit.toFixed(1)) <= -this.baseLoss) {
         await this.connection.closePosition(position.id);
         this.logger.log(`Closed position ${position.id} with loss: ${profit}`);
         console.log('MOHON MAAF ANDA KALAH');
         this.volume = this.baseVolume; // Reset volume ke volume dasar
-      } else if (Number(profit.toFixed(1) >= takeProfit) {
+      } else if (Number(profit.toFixed(1)) >= takeProfit) {
         await this.connection.closePosition(position.id);
         this.logger.log(`Closed position ${position.id} with profit: ${profit}`);
         console.log('SELAMAT ANDA MENANG');
