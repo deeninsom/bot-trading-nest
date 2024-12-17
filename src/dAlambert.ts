@@ -49,8 +49,8 @@ export class BotV6Service implements OnModuleInit {
 
   private async getLastTwoCandles() {
     try {
-      const candles = await this.account.getHistoricalCandles(this.pair, '15m');
-      return candles.length >= 4 ? candles.slice(-4) : null;
+      const candles = await this.account.getHistoricalCandles(this.pair, '5m');
+      return candles.length >= 3 ? candles.slice(-3) : null;
     } catch (error) {
       this.logger.error('Error fetching last two candles', error);
       return null;
@@ -63,7 +63,7 @@ export class BotV6Service implements OnModuleInit {
       if (!price) return;
 
       const lastTwoCandles = await this.getLastTwoCandles();
-      if (!lastTwoCandles || lastTwoCandles.length !== 4) {
+      if (!lastTwoCandles || lastTwoCandles.length !== 3) {
         this.logger.log('Insufficient candle data');
         return;
       }
