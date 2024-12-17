@@ -57,35 +57,37 @@ export class BotV6Service implements OnModuleInit {
     }
   }
 
-  private async analyzeTrend() {
-    try {
-      const price = await this.fetchRealTimePrice();
-      if (!price) return;
+private async analyzeTrend() {
+  try {
+    const price = await this.fetchRealTimePrice();
+    if (!price) return;
 
-      const lastTwoCandles = await this.getLastTwoCandles();
-      if (!lastTwoCandles || lastTwoCandles.length !== 3) {
-        this.logger.log('Insufficient candle data');
-        return;
-      }
-
-      const [previousCandle, currentCandle] = lastTwoCandles;
-      const trendIsUp = currentCandle.close > previousCandle.close;
-      const trendIsDown = currentCandle.close < previousCandle.close;
-
-      if (await this.cekOrderOpened()) {
-        const canEnterPosition = await this.canEnterNewPosition();
-        if (canEnterPosition) {
-          if (trendIsUp) {
-            await this.openPosition('BUY');
-          } else if (trendIsDown) {
-            await this.openPosition('SELL');
-          }
-        }
-      }
-    } catch (error) {
-      this.logger.error('Error analyzing trend', error);
+    const lastTwoCandles = await this.getLastTwoCandles();
+    if (!lastTwoCandles || lastTwoCandles.length !== 3) {
+      this.logger.log('Insufficient candle data');
+      return;
     }
+
+    const [previousCandle, currentCandle] = lastTwoCandles;
+    const trendIsUp = currentCandle.close > previousCandle.close && currentCandle.close > currentCandle.open;
+    const trendIsDown = currentCandle.close < previousCandle.close && currentCandle.close < currentCandle.open;
+
+    // Filter dengan MA tambahan
+    const movingAverage = (lastTwoCandles[0].close + lastTwoCandles[1].close + lastTwoCandles[2].close) / 3;
+    const priceAboveMA = price > movingAverage;
+
+    if (await this.cekOrderOpened() && await this.canEnterNewPosition()) {
+      if (trendIsUp && priceAboveMA) {
+        await this.openPosition('BUY');
+      } else if (trendIsDown && !priceAboveMA) {
+        await this.openPosition('SELL');
+      }
+    }
+  } catch (error) {
+    this.logger.error('Error analyzing trend', error);
   }
+}
+
 
   private async openPosition(position: string) {
     try {
@@ -107,14 +109,21 @@ export class BotV6Service implements OnModuleInit {
   }
 
   private async canEnterNewPosition(): Promise<boolean> {
-    const now = Date.now();
-    if (this.lastEntryTime && now - this.lastEntryTime < 5 * 60 * 1000) {
-      this.logger.log('Skipping entry, last entry was less than 5 minutes ago');
-      return false;
-    }
-    this.lastEntryTime = now;
-    return true;
+  const now = Date.now();
+  if (this.lastEntryTime && now - this.lastEntryTime < 5 * 60 * 1000) {
+    this.logger.log('Skipping entry, last entry was less than 5 minutes ago');
+    return false;
   }
+
+  if (this.volume === this.baseVolume) {
+    this.lastEntryTime = now + 2 * 60 * 1000; // Jeda tambahan 2 menit jika reset volume
+  } else {
+    this.lastEntryTime = now;
+  }
+
+  return true;
+}
+
 
   private async realTimeCheckOrderOpened() {
     const openPositions = this.connection.terminalState.positions;
@@ -152,6 +161,6 @@ export class BotV6Service implements OnModuleInit {
     setInterval(async () => {
       await this.analyzeTrend();
       await this.realTimeCheckOrderOpened();
-    }, 2000); // Eksekusi setiap 3 detik
+    }, 10000); // Eksekusi setiap 3 detik
   }
 }
