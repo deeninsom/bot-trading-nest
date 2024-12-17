@@ -9,11 +9,13 @@ export class BotV6Service implements OnModuleInit {
   private connection = null;
   private account = null;
   private pair = 'USDJPY';
-  private baseVolume = 0.01; // Base volume
-  private volume = this.baseVolume; // Current volume used for trading
+  private baseVolume = 0.01; // Volume dasar
+  private volume = this.baseVolume; // Volume saat ini
+  private maxVolume = 0.06; // Batas volume maksimum
   private lastEntryTime: number | null = null;
-  private lastTradeResult: string = 'NONE'; // Track WIN or LOSE for Martingale strategy
 
+  private baseProfit = 0.5
+  private baseLoss = 0.2
   async onModuleInit() {
     await this.initializeMetaApi();
     this.scheduleNextFetch();
@@ -21,7 +23,6 @@ export class BotV6Service implements OnModuleInit {
 
   private async initializeMetaApi() {
     try {
-      // Get account and initialize connection
       this.account = await this.api.metatraderAccountApi.getAccount(this.accountId);
       this.logger.log('Deploying account');
       await this.account.deploy();
@@ -39,10 +40,7 @@ export class BotV6Service implements OnModuleInit {
   private async fetchRealTimePrice() {
     try {
       const marketData = await this.connection.subscribeToMarketData(this.pair);
-      if (marketData && marketData.ask) {
-        return marketData.ask; // Return the ask price
-      }
-      return null;
+      return marketData?.ask || null;
     } catch (error) {
       this.logger.error('Error fetching real-time price', error);
       return null;
@@ -52,10 +50,7 @@ export class BotV6Service implements OnModuleInit {
   private async getLastTwoCandles() {
     try {
       const candles = await this.account.getHistoricalCandles(this.pair, '15m');
-      if (candles.length >= 4) {
-        return candles.slice(-4); // Get the last two candles
-      }
-      return null;
+      return candles.length >= 4 ? candles.slice(-4) : null;
     } catch (error) {
       this.logger.error('Error fetching last two candles', error);
       return null;
@@ -74,7 +69,6 @@ export class BotV6Service implements OnModuleInit {
       }
 
       const [previousCandle, currentCandle] = lastTwoCandles;
-
       const trendIsUp = currentCandle.close > previousCandle.close;
       const trendIsDown = currentCandle.close < previousCandle.close;
 
@@ -82,61 +76,34 @@ export class BotV6Service implements OnModuleInit {
         const canEnterPosition = await this.canEnterNewPosition();
         if (canEnterPosition) {
           if (trendIsUp) {
-            await this.openPosition(price, 'BUY');
-            this.logger.log('Opening BUY position due to uptrend');
+            await this.openPosition('BUY');
           } else if (trendIsDown) {
-            await this.openPosition(price, 'SELL');
-            this.logger.log('Opening SELL position due to downtrend');
-          } else {
-            this.logger.log('No clear trend detected');
+            await this.openPosition('SELL');
           }
-        } else {
-          this.logger.log('Waiting for the next entry opportunity');
         }
       }
     } catch (error) {
-      this.logger.error('Error analyzing trend:', error);
+      this.logger.error('Error analyzing trend', error);
     }
   }
 
-  private async openPosition(currentPrice: number, position: string) {
+  private async openPosition(position: string) {
     try {
       if (position === 'BUY') {
-        await this.openBuyPosition();
+        await this.connection.createMarketBuyOrder(this.pair, this.volume);
+        this.logger.log(`Opened BUY position with volume: ${this.volume}`);
       } else if (position === 'SELL') {
-        await this.openSellPosition();
+        await this.connection.createMarketSellOrder(this.pair, this.volume);
+        this.logger.log(`Opened SELL position with volume: ${this.volume}`);
       }
     } catch (error) {
       this.logger.error('Error opening position', error);
     }
   }
 
-  private async openBuyPosition() {
-    try {
-      const order = await this.connection.createMarketBuyOrder(this.pair, this.volume);
-      this.logger.log('Buy position opened:', order);
-    } catch (error) {
-      this.logger.error('Error opening buy position', error);
-    }
-  }
-
-  private async openSellPosition() {
-    try {
-      const order = await this.connection.createMarketSellOrder(this.pair, this.volume);
-      this.logger.log('Sell position opened:', order);
-    } catch (error) {
-      this.logger.error('Error opening sell position', error);
-    }
-  }
-
   private async cekOrderOpened(): Promise<boolean> {
-    try {
-      const openPositions = this.connection.terminalState.positions;
-      return openPositions.length <= 0; // Can only open new position if none are open
-    } catch (error) {
-      this.logger.error('Error checking open orders', error);
-      return false;
-    }
+    const openPositions = this.connection.terminalState.positions;
+    return openPositions.length <= 0;
   }
 
   private async canEnterNewPosition(): Promise<boolean> {
@@ -151,20 +118,23 @@ export class BotV6Service implements OnModuleInit {
 
   private async realTimeCheckOrderOpened() {
     const openPositions = this.connection.terminalState.positions;
+
     for (const position of openPositions) {
       const profit = position.unrealizedProfit;
-      console.log({
-        id_order: position.id,
-        profit: profit
-      })
-      if (profit.toFixed(1) < -1.1) {
+
+      const takeProfit = this.baseProfit * (this.volume / this.baseVolume);
+     
+      if (Number(profit.toFixed(1) <= -this.baseLoss) {
+        await this.connection.closePosition(position.id);
+        this.logger.log(`Closed position ${position.id} with loss: ${profit}`);
+        console.log('MOHON MAAF ANDA KALAH');
+        this.volume = this.baseVolume; // Reset volume ke volume dasar
+      } else if (Number(profit.toFixed(1) >= takeProfit) {
         await this.connection.closePosition(position.id);
         this.logger.log(`Closed position ${position.id} with profit: ${profit}`);
-        console.log('MOHON MAAF ANDA KALAH')
-      }else if(profit.toFixed(1) > 2.1){
-        await this.connection.closePosition(position.id);
-        this.logger.log(`Closed position ${position.id} with profit: ${profit}`);
-        console.log('SELAMAT ANDA MENANG')
+        console.log('SELAMAT ANDA MENANG');
+        this.volume = Math.min(this.volume * 2, this.maxVolume); // Gandakan volume, batasi ke maxVolume
+        this.logger.log(`Volume setelah menang: ${this.volume}`);
       }
     }
   }
@@ -172,7 +142,7 @@ export class BotV6Service implements OnModuleInit {
   private scheduleNextFetch() {
     setInterval(async () => {
       await this.analyzeTrend();
-      await this.realTimeCheckOrderOpened()
-    }, 3000); // Execute every 3 seconds
+      await this.realTimeCheckOrderOpened();
+    }, 3000); // Eksekusi setiap 3 detik
   }
 }
