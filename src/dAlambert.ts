@@ -118,10 +118,15 @@ export class BotV6Service implements OnModuleInit {
 
   private async realTimeCheckOrderOpened() {
     const openPositions = this.connection.terminalState.positions;
-
+    if(openPositions.length => 0){
     for (const position of openPositions) {
       const profit = position.unrealizedProfit;
 
+      console.log({
+        id_order: position.id,
+        profit: profit
+      })
+      
       const takeProfit = this.baseProfit * (this.volume / this.baseVolume);
      
       if (Number(profit.toFixed(1)) <= -this.baseLoss) {
@@ -137,12 +142,13 @@ export class BotV6Service implements OnModuleInit {
         this.logger.log(`Volume setelah menang: ${this.volume}`);
       }
     }
+    }
   }
 
   private scheduleNextFetch() {
     setInterval(async () => {
       await this.analyzeTrend();
       await this.realTimeCheckOrderOpened();
-    }, 3000); // Eksekusi setiap 3 detik
+    }, 2000); // Eksekusi setiap 3 detik
   }
 }
