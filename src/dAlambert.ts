@@ -128,8 +128,10 @@ export class BotV6Service implements OnModuleInit {
       })
       
       const takeProfit = this.baseProfit * (this.volume / this.baseVolume);
+      const targetLoss = this.baseLoss * (this.volume / this.baseVolume);
+      
       if (profit !== null) {
-      if (Number(profit.toFixed(1)) <= -this.baseLoss) {
+      if (Number(profit.toFixed(1)) <= -targetLoss) {
       openPositions.length >= 0 &&  await this.connection.closePosition(position?.id);
         this.logger.log(`Closed position ${position.id} with loss: ${profit}`);
         console.log('MOHON MAAF ANDA KALAH');
