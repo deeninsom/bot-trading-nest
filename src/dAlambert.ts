@@ -128,7 +128,7 @@ export class BotV6Service implements OnModuleInit {
       })
       
       const takeProfit = this.baseProfit * (this.volume / this.baseVolume);
-     
+      if (profit !== null) {
       if (Number(profit.toFixed(1)) <= -this.baseLoss) {
       openPositions.length >= 0 &&  await this.connection.closePosition(position?.id);
         this.logger.log(`Closed position ${position.id} with loss: ${profit}`);
@@ -140,6 +140,7 @@ export class BotV6Service implements OnModuleInit {
         console.log('SELAMAT ANDA MENANG');
         this.volume = Math.min(this.volume * 2, this.maxVolume); // Gandakan volume, batasi ke maxVolume
         this.logger.log(`Volume setelah menang: ${this.volume}`);
+      }
       }
     }
     
