@@ -118,7 +118,7 @@ export class BotV6Service implements OnModuleInit {
 
   private async realTimeCheckOrderOpened() {
     const openPositions = this.connection.terminalState.positions;
-    if(openPositions.length => 0){
+    if (openPositions.length => 0){
     for (const position of openPositions) {
       const profit = position.unrealizedProfit;
 
