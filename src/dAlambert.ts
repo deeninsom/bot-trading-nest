@@ -8,14 +8,14 @@ export class BotV6Service implements OnModuleInit {
   private api = new MetaApi(process.env.TOKEN);
   private connection = null;
   private account = null;
-  private pair = 'USDJPY';
+  private pair = 'EURUSD';
   private baseVolume = 0.01; // Volume dasar
   private volume = this.baseVolume; // Volume saat ini
   private maxVolume = 0.06; // Batas volume maksimum
   private lastEntryTime: number | null = null;
 
-  private baseProfit = 0.5
-  private baseLoss = 0.2
+  private baseProfit = 0.8
+  private baseLoss = 0.5
   async onModuleInit() {
     await this.initializeMetaApi();
     this.scheduleNextFetch();
@@ -49,7 +49,7 @@ export class BotV6Service implements OnModuleInit {
 
   private async getLastTwoCandles() {
     try {
-      const candles = await this.account.getHistoricalCandles(this.pair, '5m');
+      const candles = await this.account.getHistoricalCandles(this.pair, '1m');
       return candles.length >= 3 ? candles.slice(-3) : null;
     } catch (error) {
       this.logger.error('Error fetching last two candles', error);
@@ -57,36 +57,60 @@ export class BotV6Service implements OnModuleInit {
     }
   }
 
-private async analyzeTrend() {
-  try {
-    const price = await this.fetchRealTimePrice();
-    if (!price) return;
+  private async analyzeTrend() {
+    try {
+      const price = await this.fetchRealTimePrice();
+      if (!price) return;
 
-    const lastTwoCandles = await this.getLastTwoCandles();
-    if (!lastTwoCandles || lastTwoCandles.length !== 3) {
-      this.logger.log('Insufficient candle data');
-      return;
-    }
-
-    const [previousCandle, currentCandle] = lastTwoCandles;
-    const trendIsUp = currentCandle.close > previousCandle.close && currentCandle.close > currentCandle.open;
-    const trendIsDown = currentCandle.close < previousCandle.close && currentCandle.close < currentCandle.open;
-
-    // Filter dengan MA tambahan
-    const movingAverage = (lastTwoCandles[0].close + lastTwoCandles[1].close + lastTwoCandles[2].close) / 3;
-    const priceAboveMA = price > movingAverage;
-
-    if (await this.cekOrderOpened() && await this.canEnterNewPosition()) {
-      if (trendIsUp && priceAboveMA) {
-        await this.openPosition('BUY');
-      } else if (trendIsDown && !priceAboveMA) {
-        await this.openPosition('SELL');
+      const lastTwoCandles = await this.getLastTwoCandles();
+      if (!lastTwoCandles || lastTwoCandles.length !== 3) {
+        this.logger.log('Insufficient candle data');
+        return;
       }
+
+      const [previousCandle, currentCandle] = lastTwoCandles;
+      const trendIsUp = currentCandle.close > previousCandle.close && currentCandle.close > currentCandle.open;
+      const trendIsDown = currentCandle.close < previousCandle.close && currentCandle.close < currentCandle.open;
+
+
+      // Filter dengan MA tambahan
+      const movingAverage = (lastTwoCandles[0].close + lastTwoCandles[1].close + lastTwoCandles[2].close) / 3;
+      const priceAboveMA = price > movingAverage;
+
+      const lastOrder = this.connection.historyStorage.deals.sort((a, b) => a.time - b.time)
+      const lastIndex = lastOrder.length - 1;
+      const lastDeal = lastOrder[lastIndex];
+      // console.log(lastDeal);
+
+      if (await this.cekOrderOpened() && await this.canEnterNewPosition()) {
+        if (lastDeal) {
+          if (lastDeal.type === 'DEAL_TYPE_SELL') {
+            // console.log(Number(lastDeal.profit.toFixed(0)) <= 0 )
+            if (Number(lastDeal.profit.toFixed(0)) <= 0) {
+              await this.openPosition('SELL');
+            } else if (Number(lastDeal.profit.toFixed(0)) > 0) {
+              await this.openPosition('BUY');
+            }
+          } else if (lastDeal.type === 'DEAL_TYPE_BUY') {
+            if (Number(lastDeal.profit.toFixed(0)) <= 0) {
+              await this.openPosition('BUY');
+            } else if (Number(lastDeal.profit.toFixed(0)) > 0) {
+              await this.openPosition('SELL');
+            }
+          }
+        }else {
+          if (trendIsUp && priceAboveMA) {
+            await this.openPosition('BUY');
+          } else if (trendIsDown && !priceAboveMA) {
+            await this.openPosition('SELL');
+          }
+        }
+        
+      }
+    } catch (error) {
+      this.logger.error('Error analyzing trend', error);
     }
-  } catch (error) {
-    this.logger.error('Error analyzing trend', error);
   }
-}
 
 
   private async openPosition(position: string) {
@@ -109,25 +133,25 @@ private async analyzeTrend() {
   }
 
   private async canEnterNewPosition(): Promise<boolean> {
-  const now = Date.now();
-  if (this.lastEntryTime && now - this.lastEntryTime < 5 * 60 * 1000) {
-    this.logger.log('Skipping entry, last entry was less than 5 minutes ago');
-    return false;
-  }
+    const now = Date.now();
+    // if (this.lastEntryTime && now - this.lastEntryTime < 5 * 60 * 1000) {
+    //   this.logger.log('Skipping entry, last entry was less than 5 minutes ago');
+    //   return false;
+    // }
 
-  if (this.volume === this.baseVolume) {
-    this.lastEntryTime = now + 2 * 60 * 1000; // Jeda tambahan 2 menit jika reset volume
-  } else {
-    this.lastEntryTime = now;
-  }
+    if (this.volume === this.baseVolume) {
+      this.lastEntryTime = now + 2 * 60 * 1000; // Jeda tambahan 2 menit jika reset volume
+    } else {
+      this.lastEntryTime = now;
+    }
 
-  return true;
-}
+    return true;
+  }
 
 
   private async realTimeCheckOrderOpened() {
     const openPositions = this.connection.terminalState.positions;
-    
+
     for (const position of openPositions) {
       const profit = position.unrealizedProfit;
 
@@ -135,26 +159,26 @@ private async analyzeTrend() {
         id_order: position.id,
         profit: profit
       })
-      
+
       const takeProfit = this.baseProfit * (this.volume / this.baseVolume);
       const targetLoss = this.baseLoss * (this.volume / this.baseVolume);
-      
+
       if (profit !== null) {
-      if (Number(profit.toFixed(1)) <= -targetLoss) {
-      openPositions.length >= 0 &&  await this.connection.closePosition(position?.id);
-        this.logger.log(`Closed position ${position.id} with loss: ${profit}`);
-        console.log('MOHON MAAF ANDA KALAH');
-        this.volume = this.baseVolume; // Reset volume ke volume dasar
-      } else if (Number(profit.toFixed(1)) >= takeProfit) {
-    openPositions.length >= 0   && await this.connection.closePosition(position?.id);
-        this.logger.log(`Closed position ${position.id} with profit: ${profit}`);
-        console.log('SELAMAT ANDA MENANG');
-        this.volume = Math.min(this.volume * 2, this.maxVolume); // Gandakan volume, batasi ke maxVolume
-        this.logger.log(`Volume setelah menang: ${this.volume}`);
-      }
+        if (Number(profit.toFixed(1)) < -targetLoss) {
+          openPositions.length >= 0 && await this.connection.closePosition(position?.id);
+          this.logger.log(`Closed position ${position.id} with loss: ${profit}`);
+          console.log('MOHON MAAF ANDA KALAH');
+          this.volume = this.baseVolume; // Reset volume ke volume dasar
+        } else if (Number(profit.toFixed(1)) > takeProfit) {
+          openPositions.length >= 0 && await this.connection.closePosition(position?.id);
+          this.logger.log(`Closed position ${position.id} with profit: ${profit}`);
+          console.log('SELAMAT ANDA MENANG');
+          this.volume = Math.min(this.volume * 2, this.maxVolume); // Gandakan volume, batasi ke maxVolume
+          this.logger.log(`Volume setelah menang: ${this.volume}`);
+        }
       }
     }
-    
+
   }
 
   private scheduleNextFetch() {
